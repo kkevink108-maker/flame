@@ -223,12 +223,16 @@ class Detector:
         if found is None:
             self.last_full_search = True
             found = self._full_search(gray)
+        wide = False
+        if found is None:
+            found = self._find_wide_button(frame, gray)
+            wide = found is not None
         if found is None:
             return None
 
         scale, (score, x1_tl, x1_score, x3_tl, x3_score) = found
         self.hint = {"scale": scale, "x": x1_tl[0], "y": x1_tl[1]}
-        th = MATCH_THRESHOLD if self.last_full_search else HINT_THRESHOLD
+        th = 0.5 if wide else MATCH_THRESHOLD if self.last_full_search else HINT_THRESHOLD
         det = self._build(frame, scale, score, x1_tl, x1_score, x3_tl, x3_score, th)
         prev = self.prev
         if prev is not None and prev.single and not det.single and not det.x3 \
@@ -340,6 +344,33 @@ class Detector:
             x1 -= gap
             if best is None or x1 - x0 > best[1] - best[0]:
                 best = (x0, x1 + 1)
+        return best
+
+    def _find_wide_button(self, frame, gray):
+        """Backup when the text match fails (e.g. the mouse is covering "Reset x1"):
+        find the wide cyan BEFORE/AFTER button by its colour and shape, then check the
+        text still partly matches there. -> same result shape as _best(), or None."""
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        on = ((np.abs(hsv[..., 0].astype(int) - 95) < 12) & (hsv[..., 1] > 90)
+              & (hsv[..., 2] > 100)).astype(np.uint8)
+        on = cv2.morphologyEx(on, cv2.MORPH_CLOSE, np.ones((9, 25), np.uint8))   # fill the text
+        n, _, stats, _ = cv2.connectedComponentsWithStats(on)
+        lay = self.layout
+        ratio = lay["single_button_width"] / lay["button_size"][1]
+        tr = lay["template_rect"]
+        best = None
+        for x, y, w, h, area in stats[1:]:
+            if h < 12 or not (0.75 * ratio <= w / h <= 1.3 * ratio) or area < 0.8 * w * h:
+                continue
+            sc = w / lay["single_button_width"]
+            mid = x + w / 2
+            # where the template would sit (its centre is a little left of the text centre)
+            tx = mid - (0.5 - tr[0]) * lay["button_size"][0] * sc - 4.5 * sc
+            roi = (int(tx - 10 * sc), int(y - 6 * sc), int((tr[2] * lay["button_size"][0] + 20) * sc),
+                   int((tr[3] * lay["button_size"][1] + 12) * sc) + h)
+            r = self._best(gray, [sc * k for k in (0.97, 1.0, 1.03)], roi, threshold=0.5)
+            if r and (best is None or r[1][0] > best[1][0]):
+                best = r
         return best
 
     def _pick_row(self, frame, rows, scale):
