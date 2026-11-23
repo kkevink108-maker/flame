@@ -27,11 +27,12 @@ DEFAULT_LAYOUT = {
     "box_size": [200, 30],             # OCR box around each number
     # Window with only one wide "Reset x1" button (BEFORE / AFTER, no x3):
     # numbers measured from the middle of the top edge of that button.
-    "single_box_centers": [[-132, -99], [120, -99]],
+    "single_box_centers": [[-132, -99], [120, -99]],         # flame (bonus stats) window
+    "single_box_centers_cube": [[-127, -135], [124, -135]],  # cube (potential) window: numbers sit higher
     "single_button_width": 258,
 }
 
-SCALES = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.33, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0]
+SCALES = [round(0.5 * 1.05 ** i, 3) for i in range(38)]   # 0.5x .. 3.0x in 5% steps
 MATCH_THRESHOLD = 0.72
 COARSE_THRESHOLD = 0.55     # half-size first pass is blurrier; the full-size pass re-checks
 HINT_THRESHOLD = 0.6        # at the remembered spot + size we can be more lenient (hovered button, cursor on it)
@@ -341,6 +342,17 @@ class Detector:
                 best = (x0, x1 + 1)
         return best
 
+    def _pick_row(self, frame, rows, scale):
+        """Flame and cube windows put the numbers at different heights. BEFORE always
+        reads 0, so use the row whose first box reads 0 (else keep the last choice)."""
+        import ocr
+        for i, boxes in enumerate(rows):
+            x, y, w, h = boxes[0]
+            if w > 0 and h > 0 and ocr.read_number(frame[y:y + h, x:x + w], True, scale)["kind"] == "zero":
+                self.row = i
+                return boxes
+        return rows[getattr(self, "row", 0)]
+
     def _build(self, frame, scale, score, x1_tl, x1_score, x3_tl, x3_score, threshold=MATCH_THRESHOLD):
         lay = self.layout
         bw, bh = lay["button_size"][0] * scale, lay["button_size"][1] * scale
@@ -384,8 +396,9 @@ class Detector:
                 s = det.scale = (span[1] - span[0]) / lay["single_button_width"]
                 w, h = lay["box_size"][0] * s, lay["box_size"][1] * s
                 mid = (span[0] + span[1]) / 2
-                for cx, cy in lay["single_box_centers"]:
-                    det.boxes.append(rect(mid + cx * s - w / 2, mt[1] + cy * s - h / 2, w, h))
+                rows = [[rect(mid + cx * s - w / 2, mt[1] + cy * s - h / 2, w, h) for cx, cy in lay[k]]
+                        for k in ("single_box_centers", "single_box_centers_cube")]
+                det.boxes = self._pick_row(frame, rows, s)
                 return det
         for cx, cy in lay["box_centers"]:
             x = x1_tl[0] + cx * scale - w / 2
