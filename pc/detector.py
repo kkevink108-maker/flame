@@ -9,6 +9,7 @@ All layout numbers are in pixels at scale 1.0 (the size in the sample
 screenshots) and measured from the top-left corner of the Reset x1 button.
 """
 import os
+import time
 from dataclasses import dataclass, field, replace
 
 import cv2
@@ -34,6 +35,7 @@ DEFAULT_LAYOUT = {
 
 SCALES = [round(0.5 * 1.05 ** i, 3) for i in range(38)]   # 0.5x .. 3.0x in 5% steps
 MATCH_THRESHOLD = 0.72
+FULL_SEARCH_EVERY = 2.0     # seconds between full-screen searches while the window isn't found
 COARSE_THRESHOLD = 0.55     # half-size first pass is blurrier; the full-size pass re-checks
 HINT_THRESHOLD = 0.6        # at the remembered spot + size we can be more lenient (hovered button, cursor on it)
 MIN_SATURATION_RATIO = 0.45  # a greyed-out button has much less color than the template
@@ -221,6 +223,10 @@ class Detector:
                 self.prev = det
                 return det
         if found is None:
+            # The full search is the heavy part: when the window isn't there, only try
+            # it every couple of seconds instead of on every picture.
+            if time.time() < getattr(self, "next_full", 0.0):
+                return None
             self.last_full_search = True
             found = self._full_search(gray)
         wide = False
@@ -228,7 +234,9 @@ class Detector:
             found = self._find_wide_button(frame, gray)
             wide = found is not None
         if found is None:
+            self.next_full = time.time() + FULL_SEARCH_EVERY
             return None
+        self.next_full = 0.0
 
         scale, (score, x1_tl, x1_score, x3_tl, x3_score) = found
         self.hint = {"scale": scale, "x": x1_tl[0], "y": x1_tl[1]}
