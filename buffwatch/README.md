@@ -41,7 +41,10 @@ cutoff is set halfway between the two. Use **Recalibrate** any time the icon is 
 - after 1.5 s (adjustable) when something moving, like damage numbers, covers it.
 
 **Stack counter:** the icon is found by the part above its number. The number is read by comparing
-its bright white pixels with the ones you boxed (best overlap within ±1 px; 70% needed). A wider
+its white digit pixels with the ones you boxed (best overlap within ±2 px; 70% needed). Only
+digit-shaped strokes count: bright, 1 px thin, outlined by darker pixels and sitting on the number's
+baseline. Light map background showing through a round icon is ignored, so changing maps doesn't
+break it. The section shows the boxed number next to what it reads now. A wider
 number such as 12 doesn't count as 2. Two checks in a row at the boxed number → alarm (rising
 chimes + voice). If it shows that number at setup, it stays quiet until the number changes. The
 alarm stops once a different number shows, or the icon is gone for 3 s.

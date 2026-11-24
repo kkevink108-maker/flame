@@ -105,6 +105,8 @@ canvas.zoom{image-rendering:pixelated}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:13px;margin:0}
 .kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 
+.kv dd.digits{display:flex;justify-content:flex-end;gap:6px;align-items:center}
+.digits canvas{height:36px;width:auto;image-rendering:pixelated;background:#05070f;border:1px solid var(--line);border-radius:3px}
 .ref{display:flex;gap:12px;align-items:flex-start}
 .ref canvas{width:64px;height:auto;min-height:20px;image-rendering:pixelated;border-radius:6px;background:#05070f;border:1px solid var(--line);flex:none}
 .ref .fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
@@ -243,7 +245,7 @@ let mode = null;        // null | {w, step:'area'|'icon'}
 let drag = null;        // {canvas, x0,y0,x1,y1}
 let busy = false, lastRing = 0, ringIdx = 0;
 let frozen = false, frozenSince = null, prevSig = null, frozenSilenced = false, frozenRings = 0;
-const CALIB_CHECKS = 8, FROZEN_MS = 20000, BRIGHT = 170;
+const CALIB_CHECKS = 8, FROZEN_MS = 20000, LUM = 185;
 const sigCanvas = document.createElement('canvas'); sigCanvas.width = 64; sigCanvas.height = 36;
 const sigCtx = sigCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -453,36 +455,105 @@ function setTemplate(w, imgData, url, persist = true) {
   drawRef(w);
   if (persist) save();
 }
-const isBright = (d, i) => d[i] >= BRIGHT && d[i + 1] >= BRIGHT && d[i + 2] >= BRIGHT;
-// The stack number: the bright white pixels in the lower part of the boxed icon.
-function findDigit(tpl) {
-  const tw = tpl.width, h = tpl.height, d = tpl.data, y0 = Math.floor(h * 0.5);
-  let x0 = tw, x1 = -1, ya = h, yb = -1, n = 0;
-  for (let y = y0; y < h; y++) for (let x = 0; x < tw; x++) {
-    if (isBright(d, (y * tw + x) * 4)) { n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < ya) ya = y; if (y > yb) yb = y; }
+// Stack numbers are light grey/white strokes with a dark outline. "Bright" is judged by brightness
+// (luma) alone, which screen capture keeps sharp even when it smears colour around thin strokes.
+const lum = (d, i) => (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+// Bright blobs that look like a digit, as {x0,x1,y0,y1,px}: 5–10 px tall, at most 8 px wide, drawn
+// with 1-px strokes (each pixel has non-bright pixels on both sides, across or up-down) and outlined
+// by darker pixels. Light map background showing through a round icon makes filled patches, which fail.
+function glyphs(B, w, h) {
+  const bright = B.m, L = B.L;
+  const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && bright[y * w + x] === 1;
+  const seen = new Uint8Array(w * h), out = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const k = y * w + x;
+    if (!bright[k] || seen[k]) continue;
+    const px = [], st = [k]; seen[k] = 1;
+    let x0 = x, x1 = x, y0 = y, y1 = y;
+    while (st.length) {
+      const c = st.pop(), cx = c % w, cy = (c - cx) / w; px.push(c);
+      if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const n = ny * w + nx;
+        if (bright[n] && !seen[n]) { seen[n] = 1; st.push(n); }
+      }
+    }
+    const gh = y1 - y0 + 1, gw = x1 - x0 + 1;
+    if (gh < 5 || gh > 10 || gw > 8 || px.length < 3) continue;
+    let thin = 0, rim = 0, dark = 0;
+    const mine = new Set(px);
+    for (const c of px) {
+      const cx = c % w, cy = (c - cx) / w;
+      if ((!on(cx - 1, cy) && !on(cx + 1, cy)) || (!on(cx, cy - 1) && !on(cx, cy + 1))) thin++;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) { rim++; continue; } // touches the edge: counts as not dark
+        const n = ny * w + nx;
+        if (mine.has(n)) continue;
+        rim++; if (L[n] < 150) dark++;
+      }
+    }
+    if (thin >= px.length * 0.7 && dark >= rim * 0.7) out.push({ x0, x1, y0, y1, px });
   }
-  if (n < 4) return null;
-  // Window: the digit plus room to its left, so a wider number (12, 20…) never reads as the boxed one.
-  const wx = Math.max(0, x0 - 9), wy = Math.max(0, ya - 1), wx1 = Math.min(tw - 1, x1 + 1), wy1 = Math.min(h - 1, yb + 1);
-  const ww = wx1 - wx + 1, wh = wy1 - wy + 1, mask = new Uint8Array(ww * wh);
-  for (let j = 0; j < wh; j++) for (let i = 0; i < ww; i++) mask[j * ww + i] = isBright(d, ((wy + j) * tw + wx + i) * 4) ? 1 : 0;
-  return { wx, wy, ww, wh, mask, n, box: { x: x0, y: ya, w: x1 - x0 + 1, h: yb - ya + 1 } };
+  return out;
 }
-// How closely the number at a found icon matches the boxed one (overlap of white pixels, best of ±1 px).
+function brightMap(d, imgW, imgH, rx, ry, rw, rh) {
+  const m = new Uint8Array(rw * rh), L = new Uint8Array(rw * rh);
+  for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) {
+    const x = rx + i, y = ry + j;
+    if (x < 0 || y < 0 || x >= imgW || y >= imgH) { L[j * rw + i] = 255; continue; }
+    const v = lum(d, (y * imgW + x) * 4);
+    L[j * rw + i] = v; if (v >= LUM) m[j * rw + i] = 1;
+  }
+  return { m, L };
+}
+// The stack number in the boxed icon: the rightmost digit-shaped blob in its lower half, plus any
+// digits right next to it on the same baseline.
+function findDigit(tpl) {
+  const tw = tpl.width, h = tpl.height, top = Math.floor(h * 0.45), rh = h - top;
+  const all = glyphs(brightMap(tpl.data, tw, h, 0, top, tw, rh), tw, rh);
+  if (!all.length) return null;
+  all.sort((a, b) => b.x1 - a.x1);
+  const pick = [all[0]];
+  for (const g of all.slice(1)) {
+    const left = pick[pick.length - 1];
+    if (Math.abs(g.y1 - all[0].y1) <= 1 && left.x0 - g.x1 <= 3) pick.push(g);
+  }
+  const gx0 = Math.min(...pick.map(g => g.x0)), gx1 = Math.max(...pick.map(g => g.x1));
+  const gy0 = Math.min(...pick.map(g => g.y0)) + top, gy1 = Math.max(...pick.map(g => g.y1)) + top;
+  // Window: the number plus room to its left, so a wider number (12, 20…) never reads as the boxed one.
+  const wx = Math.max(0, gx0 - 9), wx1 = Math.min(tw - 1, gx1 + 1), wy = Math.max(0, gy1 - 10), wy1 = Math.min(h - 1, gy1 + 1);
+  const ww = wx1 - wx + 1, wh = wy1 - wy + 1, mask = new Uint8Array(ww * wh);
+  let n = 0;
+  for (const g of pick) for (const c of g.px) {
+    const cx = c % tw, cy = (c - cx) / tw + top;
+    mask[(cy - wy) * ww + (cx - wx)] = 1; n++;
+  }
+  return { wx, wy, ww, wh, mask, n, base: gy1 - wy };
+}
+// How closely the number at a found icon matches the boxed one: overlap of digit-shaped white
+// pixels on the right baseline, best of ±2 px.
+const PAD = 2;
 function readDigit(img, D, x, y) {
-  const w = img.width, h = img.height, d = img.data;
-  let best = 0;
-  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+  const W2 = D.ww + PAD * 2, H2 = D.wh + PAD * 2;
+  const all = glyphs(brightMap(img.data, img.width, img.height, x + D.wx - PAD, y + D.wy - PAD, W2, H2), W2, H2);
+  const live = new Uint8Array(W2 * H2);
+  for (const g of all) if (g.y1 >= D.base && g.y1 <= D.base + PAD * 2) for (const c of g.px) live[c] = 1;
+  let best = 0, bx = PAD, by = PAD;
+  for (let oy = 0; oy <= PAD * 2; oy++) for (let ox = 0; ox <= PAD * 2; ox++) {
     let inter = 0, uni = 0;
     for (let j = 0; j < D.wh; j++) for (let i = 0; i < D.ww; i++) {
-      const px = x + D.wx + i + ox, py = y + D.wy + j + oy;
-      const live = px >= 0 && py >= 0 && px < w && py < h && isBright(d, (py * w + px) * 4) ? 1 : 0;
-      const ref = D.mask[j * D.ww + i];
-      inter += ref & live; uni += ref | live;
+      const r = D.mask[j * D.ww + i], l = live[(j + oy) * W2 + i + ox];
+      inter += r & l; uni += r | l;
     }
-    if (uni && inter / uni > best) best = inter / uni;
+    const sc = uni ? inter / uni : 0;
+    if (sc > best) { best = sc; bx = ox; by = oy; }
   }
-  return best;
+  const view = new Uint8Array(D.ww * D.wh); // what it read, lined up with the boxed number
+  for (let j = 0; j < D.wh; j++) for (let i = 0; i < D.ww; i++) view[j * D.ww + i] = live[(j + by) * W2 + i + bx];
+  return { score: best, view };
 }
 // The icon is split into a 3×3 grid; the score at a spot is the average of its best 6 squares,
 // so up to a third of the icon can be covered (mouse, tooltip, damage numbers) without a false alarm.
@@ -638,8 +709,11 @@ function check(w, img, f, moving, now) {
   const res = locate(data, P, G.tol, w.anchor);
   res.present = res.score >= w.threshold;
   if (w.kind === 'count') {
-    res.digitScore = res.present ? readDigit(data, w.digit, res.x, res.y) : 0;
+    const rd = res.present ? readDigit(data, w.digit, res.x, res.y) : null;
+    res.digitScore = rd ? rd.score : 0;
+    w.readView = rd ? rd.view : null;
     res.isTarget = res.present && res.digitScore >= w.digitNeed;
+    w.last = res; drawDigits(w);
   }
   if (w.calib) {
     const lk = match(data, P, G.tol, null, { x: res.x, y: res.y, rx: Math.ceil(P.tw * 0.6), ry: Math.ceil(P.fullH * 0.6) }, true);
@@ -821,7 +895,21 @@ function drawZoomFrozen(w) {
   w.el.zctx.drawImage(snap, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
   if (drag && drag.canvas === z) drawDragRect(w.el.zctx, drag, 1, w.color);
 }
+function drawMask(c, mask, ww, wh, color) {
+  if (!c) return;
+  c.width = ww || 1; c.height = wh || 1;
+  const x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+  if (!mask) return;
+  x.fillStyle = color;
+  for (let j = 0; j < wh; j++) for (let i = 0; i < ww; i++) if (mask[j * ww + i]) x.fillRect(i, j, 1, 1);
+}
+function drawDigits(w) {
+  const D = w.digit; if (!D || !w.el.dRef) return;
+  drawMask(w.el.dRef, D.mask, D.ww, D.wh, '#e7eaf6');
+  drawMask(w.el.dLive, w.readView, D.ww, D.wh, w.last && w.last.isTarget ? '#ff4f61' : w.color);
+}
 function drawRef(w) {
+  drawDigits(w);
   const c = w.el.ref; if (!c) return;
   const ctx = c.getContext('2d');
   if (!w.tpl) { c.width = 1; c.height = 1; ctx.clearRect(0, 0, 1, 1); return; }
@@ -976,7 +1064,7 @@ function buildWatcher(w) {
     <div class="meter" title="How closely the best spot matches the boxed icon"><i></i><u></u></div>
     <dl class="kv">
       <dt>Icon match</dt><dd class="kScore">–</dd>
-      ${presence ? '' : '<dt>Number match</dt><dd class="kDigit">–</dd>'}
+      ${presence ? '' : '<dt>Number match</dt><dd class="kDigit">–</dd><dt>Number boxed · read now</dt><dd class="digits"><canvas class="dRef" width="1" height="1"></canvas><canvas class="dLive" width="1" height="1"></canvas></dd>'}
       <dt>${presence ? 'Last seen' : 'Last at target'}</dt><dd class="kSeen">–</dd>
       <dt>Check time</dt><dd class="kMs">–</dd>
     </dl>
@@ -1030,7 +1118,7 @@ function buildWatcher(w) {
     sec, zoom, zctx: zoom.getContext('2d'), zoomView: q('.zoomView'), zEmpty: q('.zEmpty'), ref: q('.refc'),
     title: q('.wname'), rule: q('.rule'), status: q('.status'), big: q('.big'), small: q('.small'),
     meter: q('.meter'), fill: q('.meter i'), mark: q('.meter u'), score: q('.kScore'), digit: q('.kDigit'),
-    seen: q('.kSeen'), ms: q('.kMs'), note: q('.note'),
+    seen: q('.kSeen'), ms: q('.kMs'), note: q('.note'), dRef: q('.dRef'), dLive: q('.dLive'),
     bArea: q('.bArea'), bIcon: q('.bIcon'), bRecal: q('.bRecal'), bSilence: q('.bSilence'), bTest: q('.bTest'),
     on: $(id('on')), name: $(id('name')), target: $(id('target')), grace: $(id('grace')), thr: $(id('thr')), ign: $(id('ign')), dig: $(id('dig')),
     vGrace: q('.vGrace'), vThr: q('.vThr'), vIgn: q('.vIgn'), vDig: q('.vDig'),
