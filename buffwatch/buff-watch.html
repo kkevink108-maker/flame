@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: control-room console. Wide left column = live game view + zoomed buff area; narrow right column = status, reference icon, settings, log. */
+/* Layout: control-room console. Top: live game view (left) + shared alarm settings and log (right).
+   Below: one section per watched buff, side by side, each with its own status, zoomed area and setup. */
 :root{
   --bg:#0c1020;
   --panel:#141a2f;
@@ -17,6 +18,7 @@
   --muted:#8e97ba;
   --gold:#f2c14e;      /* the elixir's ribbon */
   --gold-ink:#2a1f05;
+  --teal:#3fd6d0;      /* the dice's glow */
   --ok:#41d99a;
   --bad:#ff4f61;
   --warn:#ffb547;
@@ -36,60 +38,69 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
 h1{font:700 26px/1 var(--display);letter-spacing:.02em;margin:0;display:flex;align-items:center;gap:10px}
 h1 .gem{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#bff3ff 0%,#6fd3e8 45%,var(--gold) 100%);box-shadow:0 0 0 2px #0006 inset}
 header .sub{color:var(--muted);flex:1 1 260px;min-width:0}
-.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .btn{border:1px solid var(--line);background:var(--panel-2);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500}
 .btn:hover:not(:disabled){border-color:var(--muted)}
 .btn:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:600}
-.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
 .btn.small{padding:5px 10px;font-size:13px}
+.btn.on{border-color:var(--wc,var(--gold));color:var(--wc,var(--gold))}
 label.btn{display:inline-flex;align-items:center}
 label.btn input{position:absolute;width:1px;height:1px;opacity:0}
 
-.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
-.steps li{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:13px}
-.steps li b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--panel-2);font:600 12px var(--mono);color:var(--muted)}
-.steps li.now{color:var(--fg);border-color:var(--gold)}
-.steps li.now b{background:var(--gold);color:var(--gold-ink)}
-.steps li.done b{background:var(--ok);color:#06281a}
-
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
 @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.watchers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+@media (max-width:1000px){.watchers{grid-template-columns:minmax(0,1fr)}}
 .col{display:flex;flex-direction:column;gap:16px;min-width:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .card h2{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
 
-.hint{border-radius:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--gold);min-height:20px}
+.hint{border-radius:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--gold);min-height:20px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.hint .txt{flex:1 1 280px;min-width:0}
 .hint b{color:var(--gold)}
-.hint.warn{border-left-color:var(--warn)}
-.view{position:relative;background:#05070f;border-radius:8px;overflow:hidden;min-height:220px;display:grid;place-items:center}
+.hint.warn{border-left-color:var(--bad)}
+.view{position:relative;background:#05070f;border-radius:8px;overflow:hidden;min-height:120px;display:grid;place-items:center}
+#mainView{min-height:220px}
 .view canvas{display:block;max-width:100%;height:auto;touch-action:none}
 #mainCanvas{width:100%}
 .view.selecting canvas{cursor:crosshair}
-.empty{color:var(--muted);text-align:center;padding:30px 16px;max-width:460px}
+.view.selecting{outline:2px solid var(--wc,var(--gold));outline-offset:-2px}
+.empty{color:var(--muted);text-align:center;padding:20px 16px;max-width:460px;font-size:13px}
 .empty strong{display:block;color:var(--fg);font:600 18px var(--display);margin-bottom:6px}
-#zoomCanvas{image-rendering:pixelated}
+canvas.zoom{image-rendering:pixelated}
+
+/* watcher section */
+.watch{border-top:3px solid var(--wc)}
+.whead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.whead h3{margin:0;font:700 18px/1.2 var(--display);display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0}
+.whead h3 .dot{width:12px;height:12px;border-radius:3px;background:var(--wc);flex:none}
+.whead h3 .wname{overflow-wrap:anywhere}
+.rule{font-size:12px;color:var(--wc);border:1px solid var(--wc);border-radius:999px;padding:2px 10px;white-space:nowrap}
 
 /* status */
-.status{border-radius:10px;padding:16px;text-align:center;background:var(--panel-2);border:2px solid var(--line);transition:background .2s,border-color .2s}
-.status .big{font:700 30px/1.1 var(--display);letter-spacing:.04em}
-.status .small{color:var(--muted);margin-top:4px}
+.status{border-radius:10px;padding:14px;text-align:center;background:var(--panel-2);border:2px solid var(--line);transition:background .2s,border-color .2s}
+.status .big{font:700 26px/1.1 var(--display);letter-spacing:.04em}
+.status .small{color:var(--muted);margin-top:4px;font-size:13px}
 .status.ok{border-color:var(--ok)} .status.ok .big{color:var(--ok)}
 .status.bad{border-color:var(--bad);background:#3a0f18;animation:flash 1s steps(2) infinite} .status.bad .big{color:#fff}
 .status.pending .big{color:var(--warn)}
+.status.quiet{border-color:var(--warn)} .status.quiet .big{color:var(--warn)}
+.status.off{opacity:.6}
 @keyframes flash{50%{background:#5c1422}}
 @media (prefers-reduced-motion:reduce){.status.bad{animation:none}}
-.meter{position:relative;height:10px;border-radius:5px;background:#0006;overflow:hidden}
+.meter{position:relative;height:8px;border-radius:4px;background:#0006;overflow:hidden}
 .meter i{position:absolute;inset:0 auto 0 0;background:var(--muted);width:0;transition:width .2s}
 .meter.ok i{background:var(--ok)} .meter.bad i{background:var(--bad)}
 .meter u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg)}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:13px;margin:0}
 .kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-.ref{display:flex;gap:12px;align-items:center}
-.ref canvas{width:72px;height:72px;image-rendering:pixelated;border-radius:6px;background:#05070f;border:1px solid var(--line);flex:none}
-.ref p{margin:0;color:var(--muted);font-size:13px}
+.ref{display:flex;gap:12px;align-items:flex-start}
+.ref canvas{width:64px;height:auto;min-height:20px;image-rendering:pixelated;border-radius:6px;background:#05070f;border:1px solid var(--line);flex:none}
+.ref .fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.note{margin:0;color:var(--muted);font-size:13px}
 
 .field{display:flex;flex-direction:column;gap:4px}
 .field label{display:flex;justify-content:space-between;gap:8px;font-size:13px}
@@ -103,11 +114,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 details[open] summary{margin-bottom:8px}
 details .inner{display:flex;flex-direction:column;gap:10px}
 
-.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:200px;overflow:auto}
-.log li{display:flex;gap:10px}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:260px;overflow:auto}
+.log li{display:flex;gap:10px;flex-wrap:wrap}
 .log time{font-family:var(--mono);color:var(--muted);flex:none}
+.log span{min-width:0;flex:1 1 200px}
 .log .pic{display:block;max-width:100%;margin-top:4px;border-radius:4px;image-rendering:pixelated}
-.log li{flex-wrap:wrap} .log span{min-width:0;flex:1 1 200px}
 .log .bad{color:var(--bad)} .log .ok{color:var(--ok)}
 .tips{color:var(--muted);font-size:13px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 </style>
@@ -116,7 +127,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
 <div class="wrap">
   <header>
     <h1><span class="gem" aria-hidden="true"></span>Buff Watch</h1>
-    <div class="sub">Watches one buff icon on your shared game window and sounds an alarm the moment it disappears.</div>
+    <div class="sub">Watches buff icons on your shared game window and sounds an alarm when one needs you.</div>
     <div class="btns">
       <button class="btn primary" id="btnShare">Share game window</button>
       <button class="btn" id="btnStop" hidden>Stop sharing</button>
@@ -124,96 +135,33 @@ details .inner{display:flex;flex-direction:column;gap:10px}
     </div>
   </header>
 
-  <ol class="steps" id="steps">
-    <li data-step="1"><b>1</b>Share the MapleStory window</li>
-    <li data-step="2"><b>2</b>Box the buff area</li>
-    <li data-step="3"><b>3</b>Box the potion icon</li>
-    <li data-step="4"><b>4</b>Watching</li>
-  </ol>
+  <div class="hint" id="hint"><span class="txt" id="hintTxt">Click <b>Share game window</b> and choose the MapleStory window.</span><button class="btn small" id="btnFrozenSilence" hidden>Silence</button></div>
 
   <div class="grid">
     <div class="col">
       <section class="card">
-        <h2>Game screen
-          <span class="btns">
-            <button class="btn small" id="btnArea" disabled>Box buff area</button>
-            <button class="btn small" id="btnIcon" disabled>Box potion icon</button>
-            <button class="btn small" id="btnCancel" hidden>Cancel</button>
-          </span>
-        </h2>
-        <div class="hint" id="hint">Click <b>Share game window</b> and choose the MapleStory window.</div>
+        <h2>Game screen <button class="btn small" id="btnCancel" hidden>Cancel boxing</button></h2>
         <div class="view" id="mainView">
-          <div class="empty" id="emptyMain"><strong>No picture yet</strong>Share your MapleStory window. Your last setup is remembered, so next time sharing is the only step.</div>
+          <div class="empty" id="emptyMain"><strong>No picture yet</strong>Share your MapleStory window. Your setup is remembered, so next time sharing is the only step.</div>
           <canvas id="mainCanvas" hidden></canvas>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Buff area, zoomed <span id="zoomNote" style="text-transform:none;letter-spacing:0;font-family:var(--body)"></span></h2>
-        <div class="view" id="zoomView">
-          <div class="empty" id="emptyZoom">Once you box the buff area it shows up here, enlarged, so you can box the potion icon precisely.</div>
-          <canvas id="zoomCanvas" hidden></canvas>
         </div>
       </section>
     </div>
 
     <div class="col">
       <section class="card">
-        <h2>Status</h2>
-        <div class="status" id="status"><div class="big" id="statusBig">NOT SET UP</div><div class="small" id="statusSmall">Finish the steps on the left.</div></div>
-        <div class="meter" id="meter" title="How closely the best spot matches your potion icon"><i id="meterFill"></i><u id="meterMark"></u></div>
-        <dl class="kv">
-          <dt>Match</dt><dd id="kvScore">–</dd>
-          <dt>Last seen</dt><dd id="kvSeen">–</dd>
-          <dt>Check time</dt><dd id="kvMs">–</dd>
-        </dl>
-        <div class="btns">
-          <button class="btn" id="btnSilence" disabled>Silence until it's back</button>
-          <button class="btn" id="btnTest">Test sound</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Watched icon</h2>
-        <div class="ref">
-          <canvas id="refCanvas" width="1" height="1"></canvas>
-          <div class="field" style="flex:1;min-width:0">
-            <label for="inName">Name (for the voice alert)</label>
-            <input type="text" id="inName" value="Aurelia's Elixir" maxlength="40">
-          </div>
-        </div>
-        <p style="margin:0;color:var(--muted);font-size:13px" id="refNote">Box the icon while the buff is active. It then measures itself for 2 s.</p>
-        <div class="btns"><button class="btn small" id="btnRecal" disabled>Recalibrate (buff must be on)</button></div>
-      </section>
-
-      <section class="card">
         <h2>Alarm</h2>
         <div class="field">
           <label for="inVol">Volume <span id="vVol"></span></label>
           <input type="range" id="inVol" min="0" max="100" step="5">
         </div>
-        <label class="check"><input type="checkbox" id="inVoice"> Also say the buff name out loud</label>
-        <div class="field">
-          <label for="inGrace">If something moving covers it, wait <span id="vGrace"></span></label>
-          <input type="range" id="inGrace" min="500" max="4000" step="250">
-          <small>When the potion is really gone, the alarm goes off in about half a second. This wait only applies while something moving (damage numbers, skill effects) is over the icon.</small>
-        </div>
+        <label class="check"><input type="checkbox" id="inVoice"> Also speak the alert out loud</label>
         <details>
           <summary>Fine-tuning</summary>
           <div class="inner">
             <div class="field">
-              <label for="inThr">Match needed <span id="vThr"></span></label>
-              <input type="range" id="inThr" min="40" max="95" step="1">
-              <small>Set automatically when you box the icon. Lower it if you get false alarms while the buff is on; raise it if it misses that the buff is gone.</small>
-            </div>
-            <div class="field">
               <label for="inTol">Colour tolerance <span id="vTol"></span></label>
               <input type="range" id="inTol" min="15" max="150" step="5">
-            </div>
-            <div class="field">
-              <label for="inIgnore">Ignore bottom of icon <span id="vIgnore"></span></label>
-              <input type="range" id="inIgnore" min="0" max="50" step="5">
-              <small>Skips the timer/stack numbers drawn over the icon's lower part.</small>
             </div>
             <div class="field">
               <label for="inRate">Checks per second</label>
@@ -233,12 +181,14 @@ details .inner{display:flex;flex-direction:column;gap:10px}
         <ul class="tips">
           <li>Keep this page open in its own browser window. It keeps watching while it's behind the game.</li>
           <li>Don't minimize MapleStory: a minimized window sends no picture.</li>
-          <li>If you resize the game window or change its resolution, redo the two boxes.</li>
-          <li>Include the whole buff block in the area: icons shift when other buffs end.</li>
+          <li>If you resize the game window or change its resolution, redo the boxes.</li>
+          <li>Include the whole buff block in each area: icons shift when other buffs end.</li>
         </ul>
       </section>
     </div>
   </div>
+
+  <div class="watchers" id="watchers"></div>
 </div>
 
 <video id="video" muted playsinline hidden></video>
@@ -247,66 +197,84 @@ details .inner{display:flex;flex-direction:column;gap:10px}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const STORE_KEY = 'buffwatch.v3';
+const STORE_KEY = 'buffwatch.v4', OLD_KEY = 'buffwatch.v3';
 
-/* ---------------- settings ---------------- */
-const S = { threshold: 0.70, tol: 100, ignoreBottom: 0.30, interval: 250, graceMs: 1500, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
+/* ---------------- shared settings ---------------- */
+const G = { tol: 100, interval: 250, volume: 0.6, voice: true };
 
-let area = null;        // {x,y,w,h} in frame pixels
-let tplRect = null;     // {x,y,w,h} in frame pixels (where it was boxed)
-let tpl = null;         // ImageData of the icon
-let tplURL = null;      // PNG data URL for saving
-let savedFrame = null;  // {w,h} frame size at setup
-let prepared = null;
+/* ---------------- watchers ---------------- */
+// presence: alarm when the icon disappears.  count: alarm when the icon's number shows the boxed value.
+function makeWatcher(o) {
+  return Object.assign({
+    enabled: true, name: '', target: '2',
+    threshold: 0.70, ignoreBottom: 0.30, graceMs: 1500, digitNeed: 0.70,
+    area: null, tplRect: null, tpl: null, tplURL: null, savedFrame: null, calibInfo: null,
+    prepared: null, digit: null,
+    last: null, lastArea: null, anchor: null, calib: null, alarmOn: false, silenced: false,
+    missStreak: 0, missSince: null, stillMisses: 0, prevPatch: null, prevPatchKey: '', lastSeen: null,
+    hitStreak: 0, clearStreak: 0, lostSince: null, rings: 0, el: {}
+  }, o);
+}
+const W = [
+  makeWatcher({ id: 'elixir', kind: 'presence', color: '#f2c14e', name: "Aurelia's Elixir" }),
+  makeWatcher({ id: 'stack', kind: 'count', color: '#3fd6d0', name: 'Dice buff' }),
+];
+const PERSIST = ['enabled', 'name', 'target', 'threshold', 'ignoreBottom', 'graceMs', 'digitNeed', 'area', 'tplRect', 'tplURL', 'savedFrame', 'calibInfo'];
+const ruleText = w => w.kind === 'presence' ? 'Alarm when it disappears' : 'Alarm when it shows ' + (w.target || '?');
+const spoken = w => w.kind === 'presence' ? w.name + ' is gone' : w.name + ' at ' + (w.target || 'target');
 
-/* ---------------- source ---------------- */
-let source = null;      // {kind:'video'|'image', el, w, h, track}
+/* ---------------- source & canvases ---------------- */
+let source = null;      // {kind:'video'|'image', el, w(), h(), track}
 const video = $('video');
 const mainCanvas = $('mainCanvas'), mctx = mainCanvas.getContext('2d');
-const zoomCanvas = $('zoomCanvas'), zctx = zoomCanvas.getContext('2d');
-const refCanvas = $('refCanvas'), rctx = refCanvas.getContext('2d');
 const snap = document.createElement('canvas'), sctx = snap.getContext('2d', { willReadFrequently: true });
 const work = document.createElement('canvas'), wctx = work.getContext('2d', { willReadFrequently: true });
 
-let mode = null;        // null | 'area' | 'icon'
+let mode = null;        // null | {w, step:'area'|'icon'}
 let drag = null;        // {canvas, x0,y0,x1,y1}
-let last = null;        // last match result {score,x,y,present}
-let lastArea = null;    // last ImageData of the area
-
-/* ---------------- state ---------------- */
-let missStreak = 0, missSince = null, stillMisses = 0, prevPatch = null, prevPatchKey = '', alarmOn = false, silenced = false, lastSeen = null, lastBeep = 0, beepCount = 0, busy = false;
-let anchor = null;      // where the icon was last seen for sure
-let calib = null;       // {present:[], look:[]} while measuring right after the icon is boxed
-let calibInfo = null;   // {on, look, cut} from the last calibration
-let frozen = false, frozenSince = null, prevSig = null;
-const CALIB_CHECKS = 8, FROZEN_MS = 20000;
+let busy = false, lastRing = 0, ringIdx = 0;
+let frozen = false, frozenSince = null, prevSig = null, frozenSilenced = false, frozenRings = 0;
+const CALIB_CHECKS = 8, FROZEN_MS = 20000, BRIGHT = 170;
 const sigCanvas = document.createElement('canvas'); sigCanvas.width = 64; sigCanvas.height = 36;
 const sigCtx = sigCanvas.getContext('2d', { willReadFrequently: true });
 
 /* ---------------- persistence ---------------- */
 function save() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ S, area, tplRect, tplURL, savedFrame, calibInfo }));
+    const ws = {};
+    W.forEach(w => { ws[w.id] = {}; PERSIST.forEach(k => ws[w.id][k] = w[k]); });
+    localStorage.setItem(STORE_KEY, JSON.stringify({ G, ws }));
   } catch (e) {}
 }
 function load() {
   let d = null;
   try { d = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
-  if (!d) return;
-  Object.assign(S, d.S || {});
-  if ('misses' in S) { delete S.misses; S.interval = 250; } // older version: switch to faster checks
-  area = d.area || null; tplRect = d.tplRect || null; savedFrame = d.savedFrame || null; calibInfo = d.calibInfo || null;
-  if (d.tplURL) {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-      const x = c.getContext('2d'); x.drawImage(img, 0, 0);
-      setTemplate(x.getImageData(0, 0, img.width, img.height), d.tplURL, false);
-      log('Loaded your saved setup.');
-      refreshUI();
-    };
-    img.src = d.tplURL;
+  if (!d) { // carry over a setup from the single-buff version
+    let o = null;
+    try { o = JSON.parse(localStorage.getItem(OLD_KEY) || 'null'); } catch (e) {}
+    if (o && o.S) {
+      d = { G: { tol: o.S.tol, interval: o.S.interval, volume: o.S.volume, voice: o.S.voice }, ws: { elixir: {
+        name: o.S.name, threshold: o.S.threshold, ignoreBottom: o.S.ignoreBottom, graceMs: o.S.graceMs,
+        area: o.area, tplRect: o.tplRect, tplURL: o.tplURL, savedFrame: o.savedFrame, calibInfo: o.calibInfo } } };
+    }
   }
+  if (!d) return;
+  for (const k in G) if (d.G && d.G[k] != null) G[k] = d.G[k];
+  W.forEach(w => {
+    const s = d.ws && d.ws[w.id]; if (!s) return;
+    PERSIST.forEach(k => { if (s[k] != null) w[k] = s[k]; });
+    if (w.tplURL) {
+      const url = w.tplURL, img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+        setTemplate(w, x.getImageData(0, 0, img.width, img.height), url, false);
+        log(w.name + ': loaded your saved setup.');
+        refreshUI();
+      };
+      img.src = url;
+    }
+  });
 }
 
 /* ---------------- audio ---------------- */
@@ -320,33 +288,36 @@ function ensureAudio() {
 document.addEventListener('pointerdown', ensureAudio, { capture: true });
 document.addEventListener('keydown', ensureAudio, { capture: true });
 
-function beep() {
+function tone(type, freq, at, len, vol) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.01);
+  g.gain.setValueAtTime(vol, at + len - 0.02);
+  g.gain.linearRampToValueAtTime(0, at + len);
+  o.connect(g).connect(ac.destination);
+  o.start(at); o.stop(at + len + 0.02);
+}
+// Each kind of alert sounds different so you know which one it is without looking.
+function sound(kind) {
   if (!ac) return;
-  const t = ac.currentTime + 0.02, v = Math.max(0.0001, S.volume * 0.35);
-  [0, 0.16, 0.32, 0.48].forEach((d, i) => {
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = 'square';
-    o.frequency.value = i % 2 ? 740 : 1175;
-    g.gain.setValueAtTime(0, t + d);
-    g.gain.linearRampToValueAtTime(v, t + d + 0.01);
-    g.gain.setValueAtTime(v, t + d + 0.11);
-    g.gain.linearRampToValueAtTime(0, t + d + 0.13);
-    o.connect(g).connect(ac.destination);
-    o.start(t + d); o.stop(t + d + 0.15);
-  });
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, G.volume * 0.35);
+  if (kind === 'presence') [0, 0.16, 0.32, 0.48].forEach((d, i) => tone('square', i % 2 ? 740 : 1175, t + d, 0.13, v));
+  else if (kind === 'count') [0, 0.12, 0.24, 0.5, 0.62, 0.74].forEach((d, i) => tone('triangle', [660, 880, 1320][i % 3], t + d, 0.1, v * 1.4));
+  else [0, 0.35].forEach(d => tone('sawtooth', 220, t + d, 0.25, v * 0.8)); // frozen picture
 }
 function say(text) {
-  if (!S.voice || !('speechSynthesis' in window) || S.volume === 0) return;
+  if (!G.voice || !('speechSynthesis' in window) || G.volume === 0) return;
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.volume = Math.min(1, S.volume + 0.2); u.rate = 1.05;
+    u.volume = Math.min(1, G.volume + 0.2); u.rate = 1.05;
     speechSynthesis.speak(u);
   } catch (e) {}
 }
-function chime() { // pleasant "it's back" sound
+function chime() { // pleasant "all good again" sound
   if (!ac) return;
-  const t = ac.currentTime + 0.02, v = Math.max(0.0001, S.volume * 0.2);
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, G.volume * 0.2);
   [784, 1047].forEach((f, i) => {
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = 'sine'; o.frequency.value = f;
@@ -365,12 +336,12 @@ function startTicker() {
   stopTicker();
   try {
     const src = 'let t=null;onmessage=e=>{clearInterval(t);if(e.data>0)t=setInterval(()=>postMessage(0),e.data)}';
-    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-    w.onmessage = tick;
-    w.postMessage(S.interval);
-    ticker = { stop: () => w.terminate() };
+    const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    wk.onmessage = tick;
+    wk.postMessage(G.interval);
+    ticker = { stop: () => wk.terminate() };
   } catch (e) {
-    const id = setInterval(tick, S.interval);
+    const id = setInterval(tick, G.interval);
     ticker = { stop: () => clearInterval(id) };
   }
 }
@@ -378,7 +349,6 @@ function stopTicker() { if (ticker) { ticker.stop(); ticker = null; } }
 
 /* ---------------- frames ---------------- */
 function frameSize() { return source ? { w: source.w(), h: source.h() } : null; }
-
 // Setup and every check read pixels the same way (straight from the video element),
 // so the boxed icon and the live picture always go through the same colour conversion.
 function grab() { return source.el; }
@@ -416,7 +386,6 @@ async function startShare() {
 }
 function useScreenshot(file) {
   if (!file) return;
-  const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
     ensureAudio();
@@ -431,44 +400,93 @@ function useScreenshot(file) {
     log('Using screenshot "' + file.name + '".');
     onSourceReady();
   };
-  img.src = url;
+  img.src = URL.createObjectURL(file);
+}
+function resetRuntime(w) {
+  w.last = null; w.lastArea = null; w.anchor = null; w.calib = null; w.alarmOn = false; w.silenced = false;
+  w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.prevPatch = null;
+  w.hitStreak = 0; w.clearStreak = 0; w.lostSince = null; w.rings = 0;
 }
 function stopSource() {
   if (source && source.track) { try { source.track.stop(); } catch (e) {} }
   if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
-  source = null; stopTicker(); stopAlarm(); mode = null; last = null; missStreak = 0; missSince = null; stillMisses = 0; prevPatch = null; calib = null; frozen = false; frozenSince = null; prevSig = null;
+  source = null; stopTicker(); mode = null; drag = null;
+  W.forEach(resetRuntime);
+  frozen = false; frozenSince = null; prevSig = null; frozenSilenced = false;
+  setTitle();
 }
 function onSourceReady() {
   const f = frameSize();
   mainCanvas.width = f.w; mainCanvas.height = f.h;
-  if (savedFrame && area && (savedFrame.w !== f.w || savedFrame.h !== f.h)) {
-    log('Game picture size changed (' + savedFrame.w + '×' + savedFrame.h + ' → ' + f.w + '×' + f.h + '). Redo the boxes.', 'bad');
-    area = null; setTemplate(null); calibInfo = null;
-  }
-  missStreak = 0; last = null; anchor = null; frozen = false; frozenSince = null; prevSig = null;
+  W.forEach(w => {
+    resetRuntime(w);
+    if (w.savedFrame && w.area && (w.savedFrame.w !== f.w || w.savedFrame.h !== f.h)) {
+      log(w.name + ': game picture size changed (' + w.savedFrame.w + '×' + w.savedFrame.h + ' → ' + f.w + '×' + f.h + '). Redo its boxes.', 'bad');
+      w.area = null; w.calibInfo = null; setTemplate(w, null);
+    }
+  });
+  frozen = false; frozenSince = null; prevSig = null;
   startTicker();
   refreshUI();
-  if (!area) beginMode('area');
+  const first = W.find(w => w.enabled && !w.area);
+  if (first && !W.some(w => w.prepared)) beginMode(first, 'area');
 }
 
 /* ---------------- template & matching ---------------- */
-function setTemplate(imgData, url, persist = true) {
-  tpl = imgData; tplURL = imgData ? (url || null) : null;
-  if (tpl && !tplURL) {
-    const c = document.createElement('canvas'); c.width = tpl.width; c.height = tpl.height;
-    c.getContext('2d').putImageData(tpl, 0, 0); tplURL = c.toDataURL('image/png');
+function setTemplate(w, imgData, url, persist = true) {
+  w.tpl = imgData; w.tplURL = imgData ? (url || null) : null;
+  if (w.tpl && !w.tplURL) {
+    const c = document.createElement('canvas'); c.width = w.tpl.width; c.height = w.tpl.height;
+    c.getContext('2d').putImageData(w.tpl, 0, 0); w.tplURL = c.toDataURL('image/png');
   }
-  prepare();
-  drawRef();
+  prepare(w);
+  drawRef(w);
   if (persist) save();
+}
+const isBright = (d, i) => d[i] >= BRIGHT && d[i + 1] >= BRIGHT && d[i + 2] >= BRIGHT;
+// The stack number: the bright white pixels in the lower part of the boxed icon.
+function findDigit(tpl) {
+  const tw = tpl.width, h = tpl.height, d = tpl.data, y0 = Math.floor(h * 0.5);
+  let x0 = tw, x1 = -1, ya = h, yb = -1, n = 0;
+  for (let y = y0; y < h; y++) for (let x = 0; x < tw; x++) {
+    if (isBright(d, (y * tw + x) * 4)) { n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < ya) ya = y; if (y > yb) yb = y; }
+  }
+  if (n < 4) return null;
+  // Window: the digit plus room to its left, so a wider number (12, 20…) never reads as the boxed one.
+  const wx = Math.max(0, x0 - 9), wy = Math.max(0, ya - 1), wx1 = Math.min(tw - 1, x1 + 1), wy1 = Math.min(h - 1, yb + 1);
+  const ww = wx1 - wx + 1, wh = wy1 - wy + 1, mask = new Uint8Array(ww * wh);
+  for (let j = 0; j < wh; j++) for (let i = 0; i < ww; i++) mask[j * ww + i] = isBright(d, ((wy + j) * tw + wx + i) * 4) ? 1 : 0;
+  return { wx, wy, ww, wh, mask, n, box: { x: x0, y: ya, w: x1 - x0 + 1, h: yb - ya + 1 } };
+}
+// How closely the number at a found icon matches the boxed one (overlap of white pixels, best of ±1 px).
+function readDigit(img, D, x, y) {
+  const w = img.width, h = img.height, d = img.data;
+  let best = 0;
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    let inter = 0, uni = 0;
+    for (let j = 0; j < D.wh; j++) for (let i = 0; i < D.ww; i++) {
+      const px = x + D.wx + i + ox, py = y + D.wy + j + oy;
+      const live = px >= 0 && py >= 0 && px < w && py < h && isBright(d, (py * w + px) * 4) ? 1 : 0;
+      const ref = D.mask[j * D.ww + i];
+      inter += ref & live; uni += ref | live;
+    }
+    if (uni && inter / uni > best) best = inter / uni;
+  }
+  return best;
 }
 // The icon is split into a 3×3 grid; the score at a spot is the average of its best 6 squares,
 // so up to a third of the icon can be covered (mouse, tooltip, damage numbers) without a false alarm.
 const GX = 3, GY = 3, KEEP = 6;
-function prepare() {
-  prepared = null;
+function prepare(w) {
+  w.prepared = null; w.digit = null;
+  const tpl = w.tpl;
   if (!tpl) return;
-  const tw = tpl.width, th = Math.max(4, Math.round(tpl.height * (1 - S.ignoreBottom)));
+  let th;
+  if (w.kind === 'count') {
+    w.digit = findDigit(tpl);
+    th = w.digit ? Math.max(4, w.digit.wy) : Math.round(tpl.height * 0.7); // find the icon by the part above the number
+  } else th = Math.max(4, Math.round(tpl.height * (1 - w.ignoreBottom)));
+  const tw = tpl.width;
   const step = tw * th > 1800 ? 2 : 1;
   const pts = [];
   for (let y = 0; y < th; y += step) for (let x = 0; x < tw; x += step) {
@@ -486,11 +504,8 @@ function prepare() {
   pts.forEach((p, k) => s.set(p, k * 6));
   const cellN = new Int32Array(GX * GY);
   pts.forEach(p => cellN[p[5]]++);
-  prepared = { s, n: pts.length, tw, th, fullH: tpl.height, cellN };
+  w.prepared = { s, n: pts.length, tw, th, fullH: tpl.height, cellN };
 }
-// Best position of the template: share of template pixels whose colour is within tolerance.
-// `hint` is where it was last found: trying that spot first lets every other spot bail out early.
-// `skip` {x,y,rx,ry} leaves out positions near a spot (used to find the best look-alike).
 // Occlusion-tolerant score at one spot (see GX/GY/KEEP).
 function robust(img, P, tol, x, y) {
   const { s, tw, th, cellN } = P, w = img.width, h = img.height, d = img.data;
@@ -507,16 +522,18 @@ function robust(img, P, tol, x, y) {
 }
 // Where is it, and how well does it match? Checks the best spot found by the search and the
 // spot it was last seen at (it may be partly covered there, which the search alone can miss).
-function locate(img, P, tol) {
+function locate(img, P, tol, anchor) {
   const g = match(img, P, tol, anchor);
-  let best = { x: g.x, y: g.y, score: robust(img, P, tol, g.x, g.y), raw: g.score };
+  let best = { x: g.x, y: g.y, score: robust(img, P, tol, g.x, g.y) };
   if (anchor && (anchor.x !== g.x || anchor.y !== g.y)) {
     const a = robust(img, P, tol, anchor.x, anchor.y);
-    if (a > best.score) best = { x: anchor.x, y: anchor.y, score: a, raw: g.score };
+    if (a > best.score) best = { x: anchor.x, y: anchor.y, score: a };
   }
   return best;
 }
-// `full` skips the quick pre-check (used when measuring look-alikes during calibration).
+// Best position of the template: share of template pixels whose colour is within tolerance.
+// `hint` is tried first so every other spot can bail out early. `skip` {x,y,rx,ry} leaves out
+// positions near a spot (to find the best look-alike). `full` skips the quick pre-check.
 function match(img, P, tol, hint, skip, full) {
   const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
   if (w < tw || h < th) return { score: 0, x: 0, y: 0 };
@@ -548,7 +565,6 @@ function match(img, P, tol, hint, skip, full) {
   }
   return { score: bestHits / n, x: bx, y: by };
 }
-
 // The icon's pixels at a spot, to tell a still picture (a different icon slid in) from moving cover.
 function patchAt(img, P, x, y) {
   const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
@@ -565,7 +581,6 @@ function changedShare(a, b) {
   for (let j = 0; j < a.length; j += 3) if (Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]) > 45) c++;
   return c / (a.length / 3);
 }
-
 // Has the game picture stopped changing? (game minimized, sharing stalled)
 function frameChanged() {
   if (source.kind !== 'video') return true;
@@ -578,8 +593,9 @@ function frameChanged() {
 }
 
 /* ---------------- the check ---------------- */
+const ready = w => w.enabled && w.area && w.prepared && (w.kind !== 'count' || w.digit);
 async function tick() {
-  if (busy || !source || !prepared || !area || mode) return;
+  if (busy || !source) return;
   busy = true;
   const t0 = performance.now();
   try {
@@ -587,96 +603,141 @@ async function tick() {
     if (!f.w) return;
     const now = Date.now();
     const moving = frameChanged();
-    if (moving) { frozenSince = null; if (frozen) { frozen = false; log('Game picture is moving again.', 'ok'); } }
+    if (moving) { frozenSince = null; if (frozen) { frozen = false; frozenSilenced = false; log('Game picture is moving again.', 'ok'); } }
     else if (!frozenSince) frozenSince = now;
-    else if (!frozen && now - frozenSince > FROZEN_MS) { frozen = true; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
-    const r = clampRect(area, f);
-    const data = readRegion(grab(), r);
-    lastArea = data;
-    const res = locate(data, prepared, S.tol);
-    if (calib) {
-      const lk = match(data, prepared, S.tol, null, { x: res.x, y: res.y, rx: Math.ceil(prepared.tw * 0.6), ry: Math.ceil(prepared.fullH * 0.6) }, true);
-      calib.present.push(res.score); calib.look.push(robust(data, prepared, S.tol, lk.x, lk.y));
-      anchor = { x: res.x, y: res.y };
-      if (calib.present.length >= CALIB_CHECKS) finishCalibration();
+    else if (!frozen && now - frozenSince > FROZEN_MS) { frozen = true; frozenRings = 0; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
+    const img = grab();
+    for (const w of W) {
+      if (!ready(w) || (mode && mode.w === w)) continue;
+      check(w, img, f, moving, now);
     }
-    res.present = res.score >= S.threshold;
-    // Is the spot where it was last seen showing the same picture as last check?
-    let still = false;
-    if (anchor && !res.present) {
-      const key = anchor.x + ',' + anchor.y, pa = patchAt(data, prepared, anchor.x, anchor.y);
-      if (pa && prevPatch && prevPatchKey === key && moving) still = changedShare(pa, prevPatch) < 0.08;
-      prevPatch = pa; prevPatchKey = key;
-    } else prevPatch = null;
-    if (res.present) anchor = { x: res.x, y: res.y };
-    last = res;
-    $('kvMs').textContent = Math.round(performance.now() - t0) + ' ms';
-    if (!calib) update(res, still); else refreshStatus();
-    drawZoom();
+    ring(now);
+    const ms = Math.round(performance.now() - t0) + ' ms';
+    W.forEach(w => { if (w.el.ms) w.el.ms.textContent = ready(w) && source ? ms : '–'; });
+    refreshStatus();
   } catch (e) {
     console.error(e);
   } finally {
     busy = false;
   }
 }
-function startCalibration() {
-  if (!source || !prepared || !area) return;
-  calib = { present: [], look: [] };
-  stopAlarm(); missStreak = 0; missSince = null; stillMisses = 0;
-  log('Measuring the icon for ' + (CALIB_CHECKS * S.interval / 1000) + ' s. Keep the buff on.');
-  refreshUI();
-}
-function finishCalibration() {
-  const on = Math.min(...calib.present), look = Math.max(...calib.look);
-  calib = null;
-  if (on - look < 0.12) {
-    log('Calibration failed: the icon matched only ' + pct(on) + ', and other icons match up to ' + pct(look) + '. Is the buff on? Try boxing the icon again.', 'bad');
-    refreshUI();
+function check(w, img, f, moving, now) {
+  const P = w.prepared;
+  const data = readRegion(img, clampRect(w.area, f));
+  w.lastArea = data;
+  const res = locate(data, P, G.tol, w.anchor);
+  res.present = res.score >= w.threshold;
+  if (w.kind === 'count') {
+    res.digitScore = res.present ? readDigit(data, w.digit, res.x, res.y) : 0;
+    res.isTarget = res.present && res.digitScore >= w.digitNeed;
+  }
+  if (w.calib) {
+    const lk = match(data, P, G.tol, null, { x: res.x, y: res.y, rx: Math.ceil(P.tw * 0.6), ry: Math.ceil(P.fullH * 0.6) }, true);
+    w.calib.present.push(res.score); w.calib.look.push(robust(data, P, G.tol, lk.x, lk.y));
+    w.anchor = { x: res.x, y: res.y };
+    w.last = res;
+    if (w.calib.present.length >= CALIB_CHECKS) finishCalibration(w);
+    drawZoom(w);
     return;
   }
-  // Halfway between "buff on" and the best look-alike: room for the mouse covering part of the icon.
-  const cut = Math.max(0.3, Math.min(0.9, look + (on - look) * 0.5));
-  S.threshold = Math.round(cut * 100) / 100;
-  calibInfo = { on, look, cut: S.threshold };
-  $('inThr').value = Math.round(S.threshold * 100); $('inThr').dispatchEvent(new Event('input'));
-  log('Calibrated: buff on ' + pct(on) + ', look-alikes ' + pct(look) + ' → alarm below ' + pct(S.threshold) + '.', 'ok');
-  lastSeen = Date.now(); missStreak = 0; missSince = null;
-  save();
-  refreshUI();
+  // Is the spot where it was last seen showing the same picture as last check?
+  let still = false;
+  if (w.kind === 'presence') {
+    if (w.anchor && !res.present) {
+      const key = w.anchor.x + ',' + w.anchor.y, pa = patchAt(data, P, w.anchor.x, w.anchor.y);
+      if (pa && w.prevPatch && w.prevPatchKey === key && moving) still = changedShare(pa, w.prevPatch) < 0.08;
+      w.prevPatch = pa; w.prevPatchKey = key;
+    } else w.prevPatch = null;
+  }
+  if (res.present) w.anchor = { x: res.x, y: res.y };
+  w.last = res;
+  if (w.kind === 'presence') updatePresence(w, res, still, now); else updateCount(w, res, now);
+  drawZoom(w);
 }
-function pct(v) { return Math.round(v * 100) + '%'; }
-function update(res, still) {
-  const now = Date.now();
+function updatePresence(w, res, still, now) {
   if (res.present) {
-    if (alarmOn) { log(S.name + ' is back.', 'ok'); chime(); }
-    missStreak = 0; missSince = null; stillMisses = 0; lastSeen = now;
-    if (alarmOn) { stopAlarm(); }
-    if (!frozen) silenced = false;
+    if (w.alarmOn) { log(w.name + ' is back.', 'ok'); chime(); }
+    w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.lastSeen = now;
+    w.alarmOn = false; w.silenced = false; w.rings = 0;
   } else {
     // Three misses in a row with the spot unchanged = a different icon sits there now: alarm at once.
     // Otherwise (something moving over it) wait up to graceMs.
-    stillMisses = still && missStreak >= 1 ? stillMisses + 1 : 0;
-    if (!missSince) missSince = now;
-    missStreak++;
-    if (!alarmOn && (stillMisses >= 2 || now - missSince >= S.graceMs)) {
-      alarmOn = true; beepCount = 0; lastBeep = 0;
-      log(S.name + ' is missing! (match ' + pct(res.score) + ')', 'bad', lastArea);
+    w.stillMisses = still && w.missStreak >= 1 ? w.stillMisses + 1 : 0;
+    if (!w.missSince) w.missSince = now;
+    w.missStreak++;
+    if (!w.alarmOn && (w.stillMisses >= 2 || now - w.missSince >= w.graceMs)) {
+      w.alarmOn = true; w.rings = 0;
+      log(w.name + ' is missing! (match ' + pct(res.score) + ')', 'bad', w);
     }
   }
-  if ((alarmOn || frozen) && !silenced && now - lastBeep > 2400) {
-    lastBeep = now;
-    beep();
-    if (beepCount % 4 === 0) { const msg = alarmOn ? S.name + ' is gone' : 'Game picture frozen'; setTimeout(() => say(msg), 700); }
-    beepCount++;
+}
+function updateCount(w, res, now) {
+  if (res.isTarget) { w.hitStreak++; w.clearStreak = 0; w.lostSince = null; w.lastSeen = now; }
+  else if (res.present) { w.clearStreak++; w.hitStreak = 0; w.lostSince = null; }
+  else { w.hitStreak = 0; if (!w.lostSince) w.lostSince = now; }
+  // Two checks in a row (half a second) showing the boxed number = alarm.
+  if (!w.alarmOn && w.hitStreak >= 2) {
+    w.alarmOn = true; w.rings = 0;
+    log(w.name + ' is at ' + w.target + '!', 'bad', w);
   }
-  if (!alarmOn && !frozen) beepCount = 0;
-  refreshStatus();
+  // It ends once a different number shows for two checks, or the icon is gone for 3 s.
+  const cleared = w.clearStreak >= 2 || (w.lostSince && now - w.lostSince > 3000);
+  if (w.alarmOn && cleared) {
+    if (!w.silenced) log(w.name + ' moved off ' + w.target + '.', 'ok');
+    w.alarmOn = false; w.silenced = false;
+  }
 }
-function stopAlarm() {
-  alarmOn = false;
-  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
-  document.title = 'Buff Watch';
+function ring(now) {
+  const items = W.filter(w => w.enabled && w.alarmOn && !w.silenced);
+  if (frozen && !frozenSilenced) items.push('frozen');
+  setTitle();
+  if (!items.length) return;
+  if (now - lastRing < Math.max(1200, 2400 / items.length)) return;
+  lastRing = now;
+  const it = items[ringIdx++ % items.length];
+  if (it === 'frozen') {
+    sound('frozen');
+    if (frozenRings++ % 4 === 0) setTimeout(() => say('Game picture frozen'), 800);
+  } else {
+    sound(it.kind);
+    if (it.rings++ % 4 === 0) setTimeout(() => say(spoken(it)), 850);
+  }
 }
+function setTitle() {
+  const alerts = W.filter(w => w.enabled && w.alarmOn && !w.silenced).map(w => w.kind === 'presence' ? 'MISSING' : 'AT ' + w.target);
+  if (frozen && !frozenSilenced) alerts.push('FROZEN');
+  document.title = alerts.length ? '⚠ ' + alerts.join(' · ') : 'Buff Watch';
+}
+function startCalibration(w) {
+  if (!source || !ready(w)) return;
+  w.calib = { present: [], look: [] };
+  w.alarmOn = false; w.silenced = false; w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.hitStreak = 0; w.clearStreak = 0;
+  log(w.name + ': measuring the icon for ' + (CALIB_CHECKS * G.interval / 1000) + ' s. Keep it on screen.');
+  refreshUI();
+}
+function finishCalibration(w) {
+  const on = Math.min(...w.calib.present), look = Math.max(...w.calib.look);
+  const atTarget = w.kind === 'count' && w.last && w.last.isTarget;
+  w.calib = null;
+  if (on - look < 0.12) {
+    log(w.name + ': calibration failed. The icon matched only ' + pct(on) + ', and other icons match up to ' + pct(look) + '. Is it on screen? Try boxing the icon again.', 'bad');
+    refreshUI();
+    return;
+  }
+  // Halfway between "icon there" and the best look-alike: room for the mouse covering part of the icon.
+  w.threshold = Math.round(Math.max(0.3, Math.min(0.9, look + (on - look) * 0.5)) * 100) / 100;
+  w.calibInfo = { on, look };
+  log(w.name + ': calibrated. Icon ' + pct(on) + ', look-alikes ' + pct(look) + ' → found above ' + pct(w.threshold) + '.', 'ok');
+  w.lastSeen = Date.now(); w.missStreak = 0; w.missSince = null;
+  if (atTarget) { // it shows the number right now: stay quiet until it changes, then alarm the next time
+    w.alarmOn = true; w.silenced = true;
+    log(w.name + ' shows ' + w.target + ' right now. The alarm will sound the next time it reaches ' + w.target + '.');
+  }
+  syncFields(w);
+  save();
+  refreshUI();
+}
+const pct = v => Math.round(v * 100) + '%';
 
 /* ---------------- drawing ---------------- */
 let lastDraw = 0;
@@ -685,7 +746,7 @@ function loop(t) {
   if (!source || t - lastDraw < (mode || drag ? 60 : 250)) return; // calm preview while just watching
   lastDraw = t;
   drawMain();
-  if (mode !== 'icon' && !prepared && area) drawZoomLive();
+  W.forEach(w => { if (w.area && !w.prepared && !(mode && mode.w === w && mode.step === 'icon')) drawZoomLive(w); });
 }
 function drawMain() {
   const f = frameSize(); if (!f || !f.w) return;
@@ -693,65 +754,76 @@ function drawMain() {
   mctx.drawImage(mode ? snap : source.el, 0, 0);
   const lw = Math.max(2, f.w / 450);
   mctx.lineWidth = lw;
-  if (area && mode !== 'area') {
+  for (const w of W) {
+    if (!w.area || !w.enabled || (mode && mode.w === w && mode.step === 'area')) continue;
     mctx.setLineDash([lw * 4, lw * 3]);
-    mctx.strokeStyle = alarmOn ? '#ff4f61' : '#f2c14e';
-    mctx.strokeRect(area.x + lw / 2, area.y + lw / 2, area.w - lw, area.h - lw);
+    mctx.strokeStyle = w.alarmOn && !w.silenced ? '#ff4f61' : w.color;
+    mctx.strokeRect(w.area.x + lw / 2, w.area.y + lw / 2, w.area.w - lw, w.area.h - lw);
     mctx.setLineDash([]);
-    if (last && prepared && !mode) {
-      mctx.strokeStyle = last.present ? '#41d99a' : '#ff4f61';
-      mctx.strokeRect(area.x + last.x - lw, area.y + last.y - lw, prepared.tw + lw * 2, prepared.fullH + lw * 2);
+    if (w.last && w.prepared && !mode) {
+      mctx.strokeStyle = w.last.present ? w.color : '#ff4f61';
+      mctx.strokeRect(w.area.x + w.last.x - lw, w.area.y + w.last.y - lw, w.prepared.tw + lw * 2, w.prepared.fullH + lw * 2);
     }
   }
-  if (drag && drag.canvas === mainCanvas) drawDragRect(mctx, drag, lw);
+  if (drag && drag.canvas === mainCanvas) drawDragRect(mctx, drag, lw, mode.w.color);
 }
-function drawDragRect(ctx, dr, lw) {
+function drawDragRect(ctx, dr, lw, color) {
   const r = normRect(dr);
-  ctx.fillStyle = 'rgba(242,193,78,.15)';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = lw;
+  ctx.globalAlpha = 0.18; ctx.fillStyle = color; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.globalAlpha = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = lw;
   ctx.strokeRect(r.x, r.y, r.w, r.h);
 }
-function sizeZoom() {
-  if (!area) return;
-  const box = $('zoomView').clientWidth || 600;
-  const scale = Math.max(1, Math.min(box / area.w, (window.innerHeight * 0.55) / area.h, 8));
-  zoomCanvas.style.width = Math.floor(area.w * scale) + 'px';
+function sizeZoom(w) {
+  if (!w.area) return;
+  const box = w.el.zoomView.clientWidth || 500;
+  const scale = Math.max(1, Math.min(box / w.area.w, (window.innerHeight * 0.45) / w.area.h, 8));
+  w.el.zoom.style.width = Math.floor(w.area.w * scale) + 'px';
 }
-function drawZoom() {
-  if (!area || !lastArea || mode === 'icon') return;
-  if (zoomCanvas.width !== lastArea.width || zoomCanvas.height !== lastArea.height) {
-    zoomCanvas.width = lastArea.width; zoomCanvas.height = lastArea.height; sizeZoom();
+function drawZoom(w) {
+  const A = w.lastArea, z = w.el.zoom, ctx = w.el.zctx;
+  if (!w.area || !A || (mode && mode.w === w && mode.step === 'icon')) return;
+  if (z.width !== A.width || z.height !== A.height) { z.width = A.width; z.height = A.height; sizeZoom(w); }
+  ctx.putImageData(A, 0, 0);
+  const L = w.last, P = w.prepared;
+  if (!L || !P) return;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = L.present ? '#41d99a' : '#ff4f61';
+  ctx.strokeRect(L.x - 0.5, L.y - 0.5, P.tw + 1, P.fullH + 1);
+  if (w.kind === 'count' && w.digit && L.present) { // where the number is read
+    ctx.setLineDash([2, 2]);
+    ctx.strokeStyle = L.isTarget ? '#ff4f61' : w.color;
+    ctx.strokeRect(L.x + w.digit.wx - 0.5, L.y + w.digit.wy - 0.5, w.digit.ww + 1, w.digit.wh + 1);
+    ctx.setLineDash([]);
+  } else if (w.kind === 'presence' && P.th < P.fullH) {
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(L.x, L.y + P.th + 0.5); ctx.lineTo(L.x + P.tw, L.y + P.th + 0.5); ctx.stroke();
+    ctx.setLineDash([]);
   }
-  zctx.putImageData(lastArea, 0, 0);
-  if (last && prepared) {
-    zctx.lineWidth = 1;
-    zctx.strokeStyle = last.present ? '#41d99a' : '#ff4f61';
-    zctx.strokeRect(last.x - 0.5, last.y - 0.5, prepared.tw + 1, prepared.fullH + 1);
-    if (prepared.th < prepared.fullH) {
-      zctx.setLineDash([2, 2]);
-      zctx.beginPath(); zctx.moveTo(last.x, last.y + prepared.th + 0.5); zctx.lineTo(last.x + prepared.tw, last.y + prepared.th + 0.5); zctx.stroke();
-      zctx.setLineDash([]);
-    }
+}
+function drawZoomLive(w) { // area boxed but no icon yet: keep the zoom showing the picture
+  const r = clampRect(w.area, frameSize()), z = w.el.zoom;
+  if (z.width !== r.w || z.height !== r.h) { z.width = r.w; z.height = r.h; sizeZoom(w); }
+  w.el.zctx.drawImage(source.el, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+}
+function drawZoomFrozen(w) {
+  const r = clampRect(w.area, frameSize()), z = w.el.zoom;
+  z.width = r.w; z.height = r.h; sizeZoom(w);
+  w.el.zctx.drawImage(snap, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  if (drag && drag.canvas === z) drawDragRect(w.el.zctx, drag, 1, w.color);
+}
+function drawRef(w) {
+  const c = w.el.ref; if (!c) return;
+  const ctx = c.getContext('2d');
+  if (!w.tpl) { c.width = 1; c.height = 1; ctx.clearRect(0, 0, 1, 1); return; }
+  c.width = w.tpl.width; c.height = w.tpl.height;
+  ctx.putImageData(w.tpl, 0, 0);
+  if (w.kind === 'count' && w.digit) {
+    ctx.strokeStyle = w.color; ctx.lineWidth = 1;
+    ctx.strokeRect(w.digit.wx + 0.5, w.digit.wy + 0.5, w.digit.ww - 1, w.digit.wh - 1);
+  } else if (w.kind === 'presence') {
+    const th = w.prepared ? w.prepared.th : w.tpl.height;
+    if (th < w.tpl.height) { ctx.fillStyle = 'rgba(12,16,32,.65)'; ctx.fillRect(0, th, w.tpl.width, w.tpl.height - th); }
   }
-}
-function drawZoomLive() { // area boxed but no icon yet: keep the zoom showing the picture
-  const f = frameSize(); const r = clampRect(area, f);
-  if (zoomCanvas.width !== r.w || zoomCanvas.height !== r.h) { zoomCanvas.width = r.w; zoomCanvas.height = r.h; sizeZoom(); }
-  zctx.drawImage(source.el, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-}
-function drawZoomFrozen() {
-  const r = clampRect(area, frameSize());
-  zoomCanvas.width = r.w; zoomCanvas.height = r.h; sizeZoom();
-  zctx.drawImage(snap, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-  if (drag && drag.canvas === zoomCanvas) drawDragRect(zctx, drag, 1);
-}
-function drawRef() {
-  if (!tpl) { refCanvas.width = 1; refCanvas.height = 1; rctx.clearRect(0, 0, 1, 1); return; }
-  refCanvas.width = tpl.width; refCanvas.height = tpl.height;
-  rctx.putImageData(tpl, 0, 0);
-  const th = Math.max(4, Math.round(tpl.height * (1 - S.ignoreBottom)));
-  if (th < tpl.height) { rctx.fillStyle = 'rgba(12,16,32,.65)'; rctx.fillRect(0, th, tpl.width, tpl.height - th); }
 }
 
 /* ---------------- selecting boxes ---------------- */
@@ -762,9 +834,10 @@ function toCanvas(c, e) {
   const b = c.getBoundingClientRect();
   return { x: Math.max(0, Math.min(c.width, (e.clientX - b.left) * c.width / b.width)), y: Math.max(0, Math.min(c.height, (e.clientY - b.top) * c.height / b.height)) };
 }
-function attachDrag(c, which) {
+// `active()` returns the watcher this canvas is boxing for right now, or null.
+function attachDrag(c, active, done, redraw) {
   c.addEventListener('pointerdown', e => {
-    if (mode !== which) return;
+    if (!active()) return;
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
     const p = toCanvas(c, e);
@@ -773,201 +846,300 @@ function attachDrag(c, which) {
   c.addEventListener('pointermove', e => {
     if (!drag || drag.canvas !== c) return;
     const p = toCanvas(c, e); drag.x1 = p.x; drag.y1 = p.y;
-    if (c === zoomCanvas) drawZoomFrozen(); else drawMain();
+    redraw();
   });
-  c.addEventListener('pointerup', e => {
+  c.addEventListener('pointerup', () => {
     if (!drag || drag.canvas !== c) return;
-    const r = normRect(drag); drag = null;
-    if (which === 'area') finishArea(r); else finishIcon(r);
+    const r = normRect(drag), w = active(); drag = null;
+    if (w) done(w, r);
   });
 }
-attachDrag(mainCanvas, 'area');
-attachDrag(zoomCanvas, 'icon');
-
 function takeSnapshot() {
   const f = frameSize();
   snap.width = f.w; snap.height = f.h;
   sctx.drawImage(source.el, 0, 0);
 }
-function beginMode(m) {
+function beginMode(w, step) {
   if (!source) return;
-  if (m === 'icon' && !area) m = 'area';
-  if (m === 'area' || !mode) takeSnapshot();
-  mode = m;
-  if (m === 'icon') { drawZoomFrozen(); $('zoomView').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  if (step === 'icon' && !w.area) step = 'area';
+  takeSnapshot();
+  mode = { w, step };
+  if (step === 'icon') { drawZoomFrozen(w); w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else $('mainView').scrollIntoView({ behavior: 'smooth', block: 'center' });
   refreshUI();
 }
 function cancelMode() { mode = null; drag = null; refreshUI(); }
-function finishArea(r) {
+function finishArea(w, r) {
   if (r.w < 12 || r.h < 12) { hint('That box is too small. Drag around <b>all</b> of your buff icons.', true); return; }
-  area = r; savedFrame = frameSize();
-  setTemplate(null, null, false); last = null;
+  w.area = r; w.savedFrame = frameSize(); w.calibInfo = null;
+  resetRuntime(w);
+  setTemplate(w, null, null, false);
   save();
-  log('Buff area set (' + r.w + '×' + r.h + ').');
-  mode = 'icon';
-  drawZoomFrozen();
-  $('zoomView').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  log(w.name + ': buff area set (' + r.w + '×' + r.h + ').');
+  mode = { w, step: 'icon' };
+  drawZoomFrozen(w);
+  w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
   refreshUI();
 }
-function finishIcon(r) {
-  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the potion icon in the zoomed view.', true); return; }
-  const a = clampRect(area, frameSize());
-  const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, frameSize());
-  tplRect = abs;
-  setTemplate(readRegion(snap, abs));
-  save();
-  log('Boxed ' + S.name + ' (' + abs.w + '×' + abs.h + ' icon).');
-  mode = null; missStreak = 0; last = null; anchor = null; lastSeen = Date.now(); calibInfo = null;
-  startCalibration();
+function finishIcon(w, r) {
+  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the icon in the zoomed view.', true); return; }
+  const f = frameSize(), a = clampRect(w.area, f);
+  const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, f);
+  w.tplRect = abs;
+  setTemplate(w, readRegion(snap, abs));
+  if (w.kind === 'count' && !w.digit) {
+    log(w.name + ': no number found in that box. Box the icon, number included, while it shows ' + w.target + '.', 'bad');
+    hint('<b>' + escapeHTML(w.name) + ':</b> no number found in that box. Drag again around the whole icon, number included.', true);
+    return; // stay in icon mode so they can try again
+  }
+  log('Boxed ' + w.name + ' (' + abs.w + '×' + abs.h + ' icon).');
+  mode = null; resetRuntime(w); w.lastSeen = Date.now(); w.calibInfo = null;
+  startCalibration(w);
   tick();
 }
 
 /* ---------------- UI ---------------- */
-function hint(html, warn) { const h = $('hint'); h.innerHTML = html; h.classList.toggle('warn', !!warn); }
-function log(text, cls, pic) {
+function hint(html, warn) { $('hintTxt').innerHTML = html; $('hint').classList.toggle('warn', !!warn); }
+function log(text, cls, w) {
   const li = document.createElement('li');
   const t = document.createElement('time'); t.textContent = new Date().toLocaleTimeString();
   const s = document.createElement('span'); s.textContent = text; if (cls) s.className = cls;
   li.append(t, s);
-  if (pic) { // what the buff area looked like when the alarm went off
-    const c = document.createElement('canvas'); c.width = pic.width; c.height = pic.height;
-    c.getContext('2d').putImageData(pic, 0, 0);
-    if (last && prepared) { const x = c.getContext('2d'); x.strokeStyle = '#ff4f61'; x.strokeRect(last.x - 0.5, last.y - 0.5, prepared.tw + 1, prepared.fullH + 1); }
+  if (w && w.lastArea) { // what the buff area looked like when the alarm went off
+    const pic = w.lastArea, c = document.createElement('canvas'); c.width = pic.width; c.height = pic.height;
+    const x = c.getContext('2d'); x.putImageData(pic, 0, 0);
+    if (w.last && w.prepared) { x.strokeStyle = '#ff4f61'; x.strokeRect(w.last.x - 0.5, w.last.y - 0.5, w.prepared.tw + 1, w.prepared.fullH + 1); }
     c.className = 'pic'; c.title = 'The buff area when the alarm went off (red box = where it looked)';
     s.append(c);
   }
   const ul = $('log'); ul.prepend(li);
   while (ul.children.length > 40) ul.lastChild.remove();
 }
-function currentStep() {
-  if (!source) return 1;
-  if (!area || mode === 'area') return 2;
-  if (!prepared || mode === 'icon') return 3;
-  return 4;
-}
-function refreshUI() {
-  const step = currentStep();
-  document.querySelectorAll('#steps li').forEach(li => {
-    const n = +li.dataset.step;
-    li.classList.toggle('now', n === step);
-    li.classList.toggle('done', n < step);
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function buildWatcher(w) {
+  const sec = document.createElement('section');
+  sec.className = 'card watch'; sec.style.setProperty('--wc', w.color); sec.id = 'w-' + w.id;
+  const id = k => w.id + '-' + k;
+  const presence = w.kind === 'presence';
+  sec.innerHTML = `
+    <div class="whead">
+      <h3><span class="dot" aria-hidden="true"></span><span class="wname"></span></h3>
+      <span class="rule"></span>
+      <label class="check"><input type="checkbox" id="${id('on')}"> Watch</label>
+    </div>
+    <div class="status"><div class="big"></div><div class="small"></div></div>
+    <div class="meter" title="How closely the best spot matches the boxed icon"><i></i><u></u></div>
+    <dl class="kv">
+      <dt>Icon match</dt><dd class="kScore">–</dd>
+      ${presence ? '' : '<dt>Number match</dt><dd class="kDigit">–</dd>'}
+      <dt>${presence ? 'Last seen' : 'Last at target'}</dt><dd class="kSeen">–</dd>
+      <dt>Check time</dt><dd class="kMs">–</dd>
+    </dl>
+    <div class="btns">
+      <button class="btn small bArea">Box buff area</button>
+      <button class="btn small bIcon">Box icon</button>
+      <button class="btn small bRecal">Recalibrate</button>
+      <button class="btn small bSilence">${presence ? "Silence until it's back" : 'Silence until it changes'}</button>
+      <button class="btn small bTest">Test sound</button>
+    </div>
+    <div class="view zoomView">
+      <div class="empty zEmpty">Box a buff area that includes this icon. It shows up here, enlarged, so you can box the icon precisely.</div>
+      <canvas class="zoom" hidden></canvas>
+    </div>
+    <div class="ref">
+      <canvas class="refc" width="1" height="1"></canvas>
+      <div class="fields">
+        <div class="field"><label for="${id('name')}">Name</label><input type="text" id="${id('name')}" maxlength="40"></div>
+        ${presence ? '' : `<div class="field"><label for="${id('target')}">Number it shows when you box it</label><input type="text" id="${id('target')}" maxlength="4" inputmode="numeric"><small>Used for labels and the spoken alert.</small></div>`}
+      </div>
+    </div>
+    <p class="note"></p>
+    ${presence ? `<div class="field">
+      <label for="${id('grace')}">If something moving covers it, wait <span class="vGrace"></span></label>
+      <input type="range" id="${id('grace')}" min="500" max="4000" step="250">
+      <small>When it's really gone the alarm goes off in about half a second. This wait only applies while something moving (damage numbers, skill effects) is over the icon.</small>
+    </div>` : ''}
+    <details>
+      <summary>Fine-tuning</summary>
+      <div class="inner">
+        <div class="field">
+          <label for="${id('thr')}">Icon match needed <span class="vThr"></span></label>
+          <input type="range" id="${id('thr')}" min="30" max="95" step="1">
+          <small>Set automatically when you box the icon.</small>
+        </div>
+        ${presence ? `<div class="field">
+          <label for="${id('ign')}">Ignore bottom of icon <span class="vIgn"></span></label>
+          <input type="range" id="${id('ign')}" min="0" max="50" step="5">
+          <small>Skips the timer/stack numbers drawn over the icon's lower part.</small>
+        </div>` : `<div class="field">
+          <label for="${id('dig')}">Number match needed <span class="vDig"></span></label>
+          <input type="range" id="${id('dig')}" min="40" max="95" step="5">
+          <small>How exactly the white digit pixels must line up with the boxed number.</small>
+        </div>`}
+      </div>
+    </details>`;
+  $('watchers').append(sec);
+  const q = s => sec.querySelector(s);
+  const zoom = q('.zoom');
+  w.el = {
+    sec, zoom, zctx: zoom.getContext('2d'), zoomView: q('.zoomView'), zEmpty: q('.zEmpty'), ref: q('.refc'),
+    title: q('.wname'), rule: q('.rule'), status: q('.status'), big: q('.big'), small: q('.small'),
+    meter: q('.meter'), fill: q('.meter i'), mark: q('.meter u'), score: q('.kScore'), digit: q('.kDigit'),
+    seen: q('.kSeen'), ms: q('.kMs'), note: q('.note'),
+    bArea: q('.bArea'), bIcon: q('.bIcon'), bRecal: q('.bRecal'), bSilence: q('.bSilence'), bTest: q('.bTest'),
+    on: $(id('on')), name: $(id('name')), target: $(id('target')), grace: $(id('grace')), thr: $(id('thr')), ign: $(id('ign')), dig: $(id('dig')),
+    vGrace: q('.vGrace'), vThr: q('.vThr'), vIgn: q('.vIgn'), vDig: q('.vDig'),
+  };
+  const E = w.el;
+  attachDrag(zoom, () => mode && mode.step === 'icon' && mode.w === w ? w : null, finishIcon, () => drawZoomFrozen(w));
+  E.bArea.addEventListener('click', () => beginMode(w, 'area'));
+  E.bIcon.addEventListener('click', () => beginMode(w, 'icon'));
+  E.bRecal.addEventListener('click', () => startCalibration(w));
+  E.bSilence.addEventListener('click', () => { w.silenced = true; try { speechSynthesis.cancel(); } catch (e) {} log(w.name + ': alarm silenced.'); refreshStatus(); setTitle(); });
+  E.bTest.addEventListener('click', () => { ensureAudio(); setTimeout(() => { sound(w.kind); setTimeout(() => say(spoken(w)), 850); }, 50); });
+  E.on.addEventListener('change', () => {
+    w.enabled = E.on.checked;
+    if (!w.enabled) { w.alarmOn = false; w.silenced = false; }
+    log(w.name + (w.enabled ? ': watching.' : ': not watching.'));
+    save(); refreshUI();
   });
+  E.name.addEventListener('input', () => { w.name = E.name.value.trim() || 'Buff'; save(); refreshUI(); });
+  if (E.target) E.target.addEventListener('input', () => { w.target = E.target.value.trim() || '?'; save(); refreshUI(); });
+  if (E.grace) E.grace.addEventListener('input', () => { w.graceMs = +E.grace.value; syncFields(w); save(); });
+  E.thr.addEventListener('input', () => { w.threshold = E.thr.value / 100; syncFields(w); save(); refreshStatus(); });
+  if (E.ign) E.ign.addEventListener('input', () => { w.ignoreBottom = E.ign.value / 100; prepare(w); drawRef(w); syncFields(w); save(); });
+  if (E.dig) E.dig.addEventListener('input', () => { w.digitNeed = E.dig.value / 100; syncFields(w); save(); });
+}
+function syncFields(w) {
+  const E = w.el;
+  E.on.checked = w.enabled;
+  if (document.activeElement !== E.name) E.name.value = w.name;
+  if (E.target && document.activeElement !== E.target) E.target.value = w.target;
+  if (E.grace) { E.grace.value = w.graceMs; E.vGrace.textContent = (w.graceMs / 1000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '') + ' s'; }
+  E.thr.value = Math.round(w.threshold * 100); E.vThr.textContent = pct(w.threshold);
+  if (E.ign) { E.ign.value = Math.round(w.ignoreBottom * 100); E.vIgn.textContent = pct(w.ignoreBottom); }
+  if (E.dig) { E.dig.value = Math.round(w.digitNeed * 100); E.vDig.textContent = pct(w.digitNeed); }
+}
+
+function refreshUI() {
   const has = !!source;
   $('emptyMain').hidden = has; mainCanvas.hidden = !has;
   $('btnShare').hidden = has && source.kind === 'video';
   $('btnStop').hidden = !(has && source.kind === 'video');
-  $('btnArea').disabled = !has || mode === 'area';
-  $('btnIcon').disabled = !has || !area || mode === 'icon';
-  $('btnCancel').hidden = !mode || (mode === 'area' && !area) || (mode === 'icon' && !prepared);
-  $('mainView').classList.toggle('selecting', mode === 'area');
-  $('zoomView').classList.toggle('selecting', mode === 'icon');
-  const zoomOn = has && !!area;
-  $('emptyZoom').hidden = zoomOn; zoomCanvas.hidden = !zoomOn;
-  $('zoomNote').textContent = mode === 'icon' ? '· drag a box around the potion' : (prepared && has ? '· green box = where the potion was found' : '');
-  if (zoomOn) sizeZoom();
-
-  if (!has) hint(area && prepared
+  $('btnCancel').hidden = !mode;
+  const mv = $('mainView');
+  mv.classList.toggle('selecting', !!(mode && mode.step === 'area'));
+  mv.style.setProperty('--wc', mode ? mode.w.color : '');
+  for (const w of W) {
+    const E = w.el;
+    E.title.textContent = w.name;
+    E.rule.textContent = ruleText(w);
+    E.sec.style.opacity = w.enabled ? '' : '0.7';
+    E.bArea.disabled = !has;
+    E.bIcon.disabled = !has || !w.area;
+    E.bArea.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'area'));
+    E.bIcon.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'icon'));
+    E.zoomView.classList.toggle('selecting', !!(mode && mode.w === w && mode.step === 'icon'));
+    const zoomOn = has && !!w.area;
+    E.zEmpty.hidden = zoomOn; E.zoom.hidden = !zoomOn;
+    if (zoomOn) sizeZoom(w);
+    syncFields(w);
+  }
+  if (frozen && !frozenSilenced) hint('<b>Game picture froze.</b> The picture stopped changing for 20 s, so the buffs can\'t be checked. Is MapleStory minimized?', true);
+  else if (!has) hint(W.some(w => w.prepared)
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
     : 'Click <b>Share game window</b> and choose the MapleStory window.');
-  else if (mode === 'area') hint('<b>Step 2.</b> The picture is paused. Drag a box around <b>all</b> your buff icons (top right of the game). Icons move when other buffs end, so take the whole block.');
-  else if (mode === 'icon') hint('<b>Step 3.</b> In the zoomed view below, drag a tight box around the <b>' + escapeHTML(S.name) + '</b> icon. Make sure the buff is active right now.');
-  else if (prepared) hint('<b>Watching.</b> Leave this window open. You can put the game in front of it.');
+  else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> the picture is paused. Drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block.');
+  else if (mode && mode.step === 'icon') hint(mode.w.kind === 'presence'
+    ? 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon. The buff must be on right now.'
+    : 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon, <b>number included</b>. It must show <b>' + escapeHTML(mode.w.target) + '</b> right now.');
+  else if (W.some(ready)) hint('<b>Watching.</b> Leave this window open. You can put the game in front of it.');
+  else hint('Set up a buff below: click <b>Box buff area</b> in its section.');
+  $('btnFrozenSilence').hidden = !(frozen && !frozenSilenced);
   refreshStatus();
 }
-function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function refreshStatus() {
-  const st = $('status'), big = $('statusBig'), small = $('statusSmall');
-  st.classList.remove('ok', 'bad', 'pending');
-  const watching = source && prepared && area && !mode;
-  const meter = $('meter'); meter.classList.remove('ok', 'bad');
-  $('meterMark').style.left = (S.threshold * 100) + '%';
-  if (!watching) {
-    big.textContent = !source && prepared ? 'READY' : 'NOT SET UP';
-    small.textContent = !source ? (prepared ? 'Share your game window to start.' : 'Finish the steps on the left.') : 'Finish boxing the area and icon.';
-    $('meterFill').style.width = '0';
-    $('kvScore').textContent = '–';
-  } else if (calib) {
-    st.classList.add('pending');
-    big.textContent = 'CALIBRATING';
-    small.textContent = 'Measuring the icon (' + calib.present.length + ' of ' + CALIB_CHECKS + '). Keep the buff on.';
-  } else if (!last) {
-    big.textContent = 'STARTING'; small.textContent = 'Taking the first look…';
-  } else {
-    $('meterFill').style.width = (last.score * 100).toFixed(0) + '%';
-    meter.classList.add(last.present ? 'ok' : 'bad');
-    $('kvScore').textContent = (last.score * 100).toFixed(0) + '% (needs ' + Math.round(S.threshold * 100) + '%)';
-    if (frozen && !alarmOn) {
-      st.classList.add('bad');
-      big.textContent = 'PICTURE FROZEN';
-      small.textContent = silenced ? 'Alarm silenced.' : 'The game picture stopped changing. Is MapleStory minimized?';
-    } else if (alarmOn) {
-      st.classList.add('bad');
-      big.textContent = 'BUFF MISSING';
-      small.textContent = silenced ? 'Alarm silenced until the buff is back.' : S.name + ' is gone. Re-drink it!';
-      document.title = (document.title.startsWith('⚠') ? '!! ' : '⚠ ') + 'BUFF MISSING';
-    } else if (!last.present) {
-      st.classList.add('pending');
-      big.textContent = 'CHECKING';
-      small.textContent = 'Not found for ' + ((Date.now() - (missSince || Date.now())) / 1000).toFixed(1) + ' s…';
+  for (const w of W) {
+    const E = w.el, st = E.status, L = w.last;
+    st.classList.remove('ok', 'bad', 'pending', 'quiet', 'off');
+    E.meter.classList.remove('ok', 'bad');
+    E.mark.style.left = (w.threshold * 100) + '%';
+    let big, small;
+    const editing = mode && mode.w === w;
+    if (!w.enabled) { st.classList.add('off'); big = 'OFF'; small = 'Tick "Watch" to turn it on.'; }
+    else if (!ready(w) || !source || editing) {
+      big = editing ? 'SETTING UP' : (!source && w.prepared ? 'READY' : 'NOT SET UP');
+      small = editing ? 'Follow the instructions above the game screen.'
+        : !source ? (w.prepared ? 'Share your game window to start.' : 'Share your game window, then box the area and icon.')
+        : 'Box the buff area and the icon.';
+    } else if (w.calib) {
+      st.classList.add('pending'); big = 'CALIBRATING';
+      small = 'Measuring the icon (' + w.calib.present.length + ' of ' + CALIB_CHECKS + '). Keep it on screen.';
+    } else if (!L) { big = 'STARTING'; small = 'Taking the first look…'; }
+    else if (w.kind === 'presence') {
+      if (w.alarmOn) { st.classList.add(w.silenced ? 'quiet' : 'bad'); big = 'BUFF MISSING'; small = w.silenced ? 'Alarm silenced until the buff is back.' : w.name + ' is gone. Re-drink it!'; }
+      else if (!L.present) { st.classList.add('pending'); big = 'CHECKING'; small = 'Not found for ' + ((Date.now() - (w.missSince || Date.now())) / 1000).toFixed(1) + ' s…'; }
+      else { st.classList.add('ok'); big = 'BUFF ON'; small = w.name + ' is active.'; }
     } else {
-      st.classList.add('ok');
-      big.textContent = 'BUFF ON';
-      small.textContent = S.name + ' is active.';
+      if (w.alarmOn) { st.classList.add(w.silenced ? 'quiet' : 'bad'); big = 'AT ' + w.target; small = w.silenced ? 'Quiet until the number changes. The next time it reaches ' + w.target + ' it will alarm.' : w.name + ' is at ' + w.target + '!'; }
+      else if (!L.present) { st.classList.add('pending'); big = 'NOT FOUND'; small = "Can't see the icon right now (buff off or covered)."; }
+      else { st.classList.add('ok'); big = 'NOT ' + w.target; small = 'Waiting for ' + w.name + ' to reach ' + w.target + '.'; }
     }
+    E.big.textContent = big; E.small.textContent = small;
+    if (L && ready(w) && source && !editing) {
+      E.fill.style.width = (L.score * 100).toFixed(0) + '%';
+      E.meter.classList.add(L.present ? 'ok' : 'bad');
+      E.score.textContent = pct(L.score) + ' (needs ' + pct(w.threshold) + ')';
+      if (E.digit) E.digit.textContent = L.present ? pct(L.digitScore || 0) + ' (needs ' + pct(w.digitNeed) + ')' : '–';
+    } else {
+      E.fill.style.width = '0'; E.score.textContent = '–'; if (E.digit) E.digit.textContent = '–';
+    }
+    E.seen.textContent = w.lastSeen ? new Date(w.lastSeen).toLocaleTimeString() : '–';
+    E.bSilence.disabled = !w.alarmOn || w.silenced;
+    E.bRecal.disabled = !ready(w) || !source || !!w.calib || !!editing;
+    E.note.textContent = w.calibInfo
+      ? 'Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' + (w.kind === 'count' && w.digit ? ' Number: ' + w.digit.n + ' white pixels, framed in the picture.' : '')
+      : w.kind === 'presence'
+        ? 'Box the icon while the buff is on. It then measures itself for 2 s.'
+        : 'Box the icon while it shows ' + w.target + ', number included. It then measures itself for 2 s.';
   }
-  $('kvSeen').textContent = lastSeen ? new Date(lastSeen).toLocaleTimeString() : '–';
-  $('btnSilence').disabled = !(alarmOn || frozen) || silenced;
-  $('btnRecal').disabled = !watching || !!calib;
-  $('refNote').textContent = calibInfo
-    ? 'Calibrated: buff on ' + pct(calibInfo.on) + ', other icons up to ' + pct(calibInfo.look) + '. Alarm below ' + pct(S.threshold) + '.'
-    : 'Box the icon while the buff is active. It then measures itself for 2 s.';
 }
 
-/* ---------------- settings controls ---------------- */
+/* ---------------- shared settings controls ---------------- */
 function bindSettings() {
   const show = () => {
-    $('vVol').textContent = Math.round(S.volume * 100) + '%';
-    $('vThr').textContent = Math.round(S.threshold * 100) + '%';
-    $('vTol').textContent = S.tol;
-    $('vIgnore').textContent = Math.round(S.ignoreBottom * 100) + '%';
-    $('vGrace').textContent = (S.graceMs / 1000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '') + ' s';
+    $('vVol').textContent = Math.round(G.volume * 100) + '%';
+    $('vTol').textContent = G.tol;
   };
-  $('inVol').value = Math.round(S.volume * 100);
-  $('inThr').value = Math.round(S.threshold * 100);
-  $('inTol').value = S.tol;
-  $('inIgnore').value = Math.round(S.ignoreBottom * 100);
-  $('inGrace').value = S.graceMs;
-  $('inRate').value = String(S.interval);
-  $('inVoice').checked = S.voice;
-  $('inName').value = S.name;
+  $('inVol').value = Math.round(G.volume * 100);
+  $('inTol').value = G.tol;
+  $('inRate').value = String(G.interval);
+  $('inVoice').checked = G.voice;
   show();
-  $('inVol').addEventListener('input', e => { S.volume = e.target.value / 100; show(); save(); });
-  $('inThr').addEventListener('input', e => { S.threshold = e.target.value / 100; show(); save(); refreshStatus(); });
-  $('inTol').addEventListener('input', e => { S.tol = +e.target.value; show(); save(); });
-  $('inIgnore').addEventListener('input', e => { S.ignoreBottom = e.target.value / 100; prepare(); drawRef(); show(); save(); });
-  $('inGrace').addEventListener('input', e => { S.graceMs = +e.target.value; show(); save(); });
-  $('inRate').addEventListener('change', e => { S.interval = +e.target.value; show(); save(); if (ticker) startTicker(); });
-  $('inVoice').addEventListener('change', e => { S.voice = e.target.checked; save(); });
-  $('inName').addEventListener('input', e => { S.name = e.target.value.trim() || 'Buff'; save(); });
+  $('inVol').addEventListener('input', e => { G.volume = e.target.value / 100; show(); save(); });
+  $('inTol').addEventListener('input', e => { G.tol = +e.target.value; show(); save(); });
+  $('inRate').addEventListener('change', e => { G.interval = +e.target.value; save(); if (ticker) startTicker(); });
+  $('inVoice').addEventListener('change', e => { G.voice = e.target.checked; save(); });
 }
 
+W.forEach(buildWatcher);
+attachDrag(mainCanvas, () => mode && mode.step === 'area' ? mode.w : null, finishArea, drawMain);
 $('btnShare').addEventListener('click', startShare);
 $('btnStop').addEventListener('click', () => { stopSource(); log('Screen sharing stopped.'); refreshUI(); });
 $('fileShot').addEventListener('change', e => { useScreenshot(e.target.files[0]); e.target.value = ''; });
-$('btnArea').addEventListener('click', () => beginMode('area'));
-$('btnIcon').addEventListener('click', () => beginMode('icon'));
 $('btnCancel').addEventListener('click', cancelMode);
-$('btnRecal').addEventListener('click', startCalibration);
-$('btnSilence').addEventListener('click', () => { silenced = true; try { speechSynthesis.cancel(); } catch (e) {} log('Alarm silenced.'); refreshStatus(); });
-$('btnTest').addEventListener('click', () => { ensureAudio(); setTimeout(() => { beep(); setTimeout(() => say(S.name + ' is gone'), 700); }, 50); });
+$('btnFrozenSilence').addEventListener('click', () => { frozenSilenced = true; try { speechSynthesis.cancel(); } catch (e) {} log('Frozen-picture alarm silenced.'); refreshUI(); setTitle(); });
 $('btnClearLog').addEventListener('click', () => { $('log').innerHTML = ''; });
-window.addEventListener('resize', () => sizeZoom());
+window.addEventListener('resize', () => W.forEach(sizeZoom));
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && mode) cancelMode(); });
 
 load();
 bindSettings();
 refreshUI();
 requestAnimationFrame(loop);
+let lastFrozenUI = false;
+setInterval(() => { if (frozen !== lastFrozenUI) { lastFrozenUI = frozen; refreshUI(); } }, 500);
 })();
 </script>
 </body>
