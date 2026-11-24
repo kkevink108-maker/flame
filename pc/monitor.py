@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 WIN = "Flame bot - live monitor"
-BAR_H = 186
+BAR_H = 228
 MIN_W = 800
 MAX_W, MAX_H = 1000, 520
 MODES = ["auto", "x1", "x3"]
@@ -26,7 +26,8 @@ COLORS = {
 class State:
     """Everything shared between the bot thread and the monitor window."""
 
-    def __init__(self, mode="auto", running=False, max_resets=200, limit_on=True):
+    def __init__(self, mode="auto", running=False, max_resets=200, limit_on=True,
+                 line_target="off", cp_also=True):
         self.lock = threading.Lock()
         self.frame = None
         self.det = None
@@ -39,6 +40,9 @@ class State:
         self.run_resets = 0           # resets since the last START
         self.max_resets = max_resets  # pause after this many resets per run
         self.limit_on = limit_on      # False = no max, keep going until a positive
+        self.line_target = line_target  # cube lines to stop on (see lines.TARGETS)
+        self.cp_also = cp_also        # with a line target: also stop on a Combat Power gain
+        self.lines_seen = ""          # last AFTER lines read, for the info line
         self.n_x1 = self.n_x3 = 0     # total resets by button
         self.spent_run = 0            # mesos spent since the last START
         self.spent_total = 0          # mesos spent since the program started
@@ -64,6 +68,18 @@ class State:
         with self.lock:
             self.limit_on = not self.limit_on
             self.message = "Max resets ON" if self.limit_on else "Max resets OFF - runs until a positive"
+
+    def cycle_target(self):
+        import lines
+        with self.lock:
+            self.line_target = lines.ORDER[(lines.ORDER.index(self.line_target) + 1) % len(lines.ORDER)]
+            self.message = f"Line target: {lines.TARGETS[self.line_target][0]}"
+
+    def toggle_cp_also(self):
+        with self.lock:
+            self.cp_also = not self.cp_also
+            self.message = ("Also stops on a Combat Power gain" if self.cp_also
+                            else "Combat Power gains ignored - only the line target stops it")
 
     def change_max(self, delta):
         with self.lock:
@@ -165,6 +181,7 @@ class Monitor:
             using = st.capture_using
             run_resets, max_resets, limit_on = st.run_resets, st.max_resets, st.limit_on
             spent_run, spent_total, n_x1, n_x3 = st.spent_run, st.spent_total, st.n_x1, st.n_x3
+            line_target, cp_also, lines_seen = st.line_target, st.cp_also, st.lines_seen
 
         if frame is None:
             view = np.zeros((200, MIN_W, 3), np.uint8)
@@ -195,6 +212,9 @@ class Monitor:
                         cv2.line(img, (x, y), (x + w, y + h), (40, 40, 200), t)
                         cv2.line(img, (x + w, y), (x, y + h), (40, 40, 200), t)
                 region = det.region(margin=60)
+                if region and getattr(det, "cube", False):   # show the potential lines too
+                    up = int(110 * det.scale)
+                    region = (region[0], region[1] - up, region[2], region[3] + up)
             if region:
                 x, y, w, h = region
                 x0, y0 = max(0, x), max(0, y)
@@ -255,15 +275,26 @@ class Monitor:
         x += 6
         button(x, 1, "LIMIT ON" if limit_on else "NO LIMIT", limit_on, st.toggle_limit, 96)
 
+        # Row 3: cube line target
+        import lines
+        x = 10
+        text(x, 116, "Cube lines:")
+        x += 110
+        x = button(x, 2, lines.TARGETS[line_target][0], line_target != "off", st.cycle_target, 150)
+        x = button(x, 2, "CP+ ALSO" if cp_also or line_target == "off" else "CP+ OFF",
+                   cp_also or line_target == "off", st.toggle_cp_also, 100)
+        if line_target != "off":
+            text(x + 6, 116, lines_seen[:60], (170, 170, 170), 0.45)
+
         # Info lines
         state_txt = "RUNNING" if running else ("VIEW ONLY" if not self.can_act else "PAUSED")
-        text(10, 108, f"Mesos spent: {spent_run:,} this run  |  {spent_total:,} total"
+        text(10, 150, f"Mesos spent: {spent_run:,} this run  |  {spent_total:,} total"
                       f"  ({n_x3} x3, {n_x1} x1)", (120, 220, 255), 0.5)
         how = {"window": "  (direct - OK to cover it)",
                "screen": "  (screen grab - keep it uncovered)"}.get(using, "")
-        text(10, 130, f"Capturing: {capture_name}{how}"[:120], (170, 170, 170), 0.5)
-        text(10, 152, f"{state_txt} | {status}"[:110], (230, 230, 230), 0.5)
-        text(10, 174, message[:110], (0, 220, 255), 0.5)
+        text(10, 172, f"Capturing: {capture_name}{how}"[:120], (170, 170, 170), 0.5)
+        text(10, 194, f"{state_txt} | {status}"[:110], (230, 230, 230), 0.5)
+        text(10, 216, message[:110], (0, 220, 255), 0.5)
         cv2.imshow(WIN, np.vstack([view, bar]))
 
     def close(self):

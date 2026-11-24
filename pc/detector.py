@@ -52,6 +52,7 @@ class Detection:
     x1_ghost: tuple = None            # where Reset x1 is / would be
     x3_ghost: tuple = None            # where Reset x3 is / would be
     single: bool = False              # one wide Reset x1 button only (BEFORE / AFTER window)
+    cube: bool = False                # ...and it's the cube (potential) window
     boxes: list = field(default_factory=list)
 
     def region(self, margin=40):
@@ -438,6 +439,7 @@ class Detector:
                 rows = [[rect(mid + cx * s - w / 2, mt[1] + cy * s - h / 2, w, h) for cx, cy in lay[k]]
                         for k in ("single_box_centers", "single_box_centers_cube")]
                 det.boxes = self._pick_row(frame, rows, s)
+                det.cube = getattr(self, "row", 0) == 1
                 return det
         for cx, cy in lay["box_centers"]:
             x = x1_tl[0] + cx * scale - w / 2

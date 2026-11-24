@@ -27,6 +27,7 @@ import time
 import cv2
 import numpy as np
 
+import lines
 import ocr
 from capture import make_source, normalize
 from detector import DEFAULT_LAYOUT, TEMPLATE_DIR, USER_TEMPLATE_DIR, Detector
@@ -64,6 +65,8 @@ DEFAULTS = {
     "stop_after_positive": True,
     "max_resets": 200,           # pause after this many resets per START (also set in the monitor)
     "max_resets_on": True,       # False = no limit (LIMIT ON / NO LIMIT button in the monitor)
+    "line_target": "off",        # cube lines to stop on: off | drop2 | meso2 | dropmeso2 | dropmeso3
+    "cp_also": True,             # with a line target, also stop on a Combat Power gain
     "cost_x1": 3_000_000,        # mesos per Reset x1 (for the spent tracker)
     "cost_x3": 9_000_000,        # mesos per Reset x3
     "delay_before_reset_click": 0.5,  # extra wait after the results show, before clicking Reset
@@ -274,6 +277,29 @@ class Bot:
             time.sleep(random.uniform(0.04, 0.08))
         self.pico.click()
 
+    def found_lines(self, frame, det, target, texts, results):
+        """The AFTER lines hit the target: pick AFTER (click its result) and stop."""
+        cfg, st = self.cfg, self.st
+        self.click(*box_point(det.boxes[-1]))
+        self.last_reset = None
+        save_debug(frame, det, "lines")
+        with st.lock:
+            n = st.run_resets
+        label = lines.TARGETS[target][0]
+        msg = f"TARGET {label} - clicked AFTER after {n} resets: " + " | ".join(texts)
+        print(msg)
+        beep()
+        if cfg.get("discord_webhook"):
+            time.sleep(cfg["flame_screenshot_delay"])
+            try:
+                after = self.src.grab()
+                after_det = self.det.find(after) or det
+            except Exception:
+                after, after_det = frame, det
+            self.notify(f"**Cube target hit: {label}** after {n} resets\n" + "\n".join(texts)
+                        + f"\nCombat Power: {fmt_result(results[-1])}", after, after_det, full=True)
+        self.stop(msg, positive=True)
+
     def stop(self, message, frame=None, det=None, positive=False):
         """The bot pauses itself (positive found, limit hit, problem): the next START
         begins a new run, so the run counters start from 0 again."""
@@ -437,7 +463,23 @@ class Bot:
                     stuck = 0
                 awaiting = None
 
+            with st.lock:
+                target, cp_also = st.line_target, st.cp_also
+            if target != "off" and det.cube:
+                if not lines.available():
+                    self.stop("Cube line target needs: pip install rapidocr-onnxruntime - paused.")
+                    continue
+                texts = lines.read_lines(frame, det)
+                met, count, kinds = lines.check(target, texts)
+                st.set(lines_seen=" | ".join(texts))
+                if met:
+                    self.found_lines(frame, det, target, texts, results)
+                    prev = None
+                    continue
+
             positives = [i for i, r in enumerate(results) if r["kind"] == "positive"]
+            if target != "off" and det.cube and not cp_also:
+                positives = []                   # only the line target counts
             if positives:
                 best = max(positives, key=lambda i: results[i]["value"])
                 val = results[best]["value"]
@@ -572,7 +614,9 @@ def run_with_monitor(cfg, image=None, with_pico=True):
         pico = Pico(cfg["pico_port"])
         print(f"Pico on {pico.port}")
     state = State(mode=cfg["mode"] if cfg["mode"] in MODES else "auto", max_resets=cfg["max_resets"],
-                  limit_on=cfg["max_resets_on"])
+                  limit_on=cfg["max_resets_on"],
+                  line_target=cfg["line_target"] if cfg["line_target"] in lines.TARGETS else "off",
+                  cp_also=cfg["cp_also"])
     state.set(message="Press START (or F8) to begin" if pico else "View only - no inputs are sent")
     start_hotkeys(state)
     bot = Bot(cfg, state, source, detector, pico, image)
@@ -613,6 +657,8 @@ def run_with_monitor(cfg, image=None, with_pico=True):
     cfg["mode"] = state.mode
     cfg["max_resets"] = state.max_resets
     cfg["max_resets_on"] = state.limit_on
+    cfg["line_target"] = state.line_target
+    cfg["cp_also"] = state.cp_also
     save_config(cfg)
     if state.resets:
         print(f"Total: {state.resets} resets ({state.n_x3} x3, {state.n_x1} x1), "

@@ -1,0 +1,6 @@
+opencv-python
+numpy
+mss
+pyserial
+pynput
+rapidocr-onnxruntime
