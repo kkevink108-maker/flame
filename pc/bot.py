@@ -65,7 +65,7 @@ DEFAULTS = {
     "stop_after_positive": True,
     "max_resets": 200,           # pause after this many resets per START (also set in the monitor)
     "max_resets_on": True,       # False = no limit (LIMIT ON / NO LIMIT button in the monitor)
-    "line_target": "off",        # cube lines to stop on: off | drop2 | meso2 | dropmeso2 | dropmeso3
+    "line_target": "off",        # cube lines to stop on: off | drop1cp | drop2cp | meso1cp | drop2 | ... (lines.py)
     "cp_also": True,             # with a line target, also stop on a Combat Power gain
     "cost_x1": 3_000_000,        # mesos per Reset x1 (for the spent tracker)
     "cost_x3": 9_000_000,        # mesos per Reset x3
@@ -470,7 +470,7 @@ class Bot:
                     self.stop("Cube line target needs: pip install rapidocr-onnxruntime - paused.")
                     continue
                 texts = lines.read_lines(frame, det)
-                met, count, kinds = lines.check(target, texts)
+                met, count, kinds = lines.check(target, texts, results[-1]["kind"] == "positive")
                 st.set(lines_seen=" | ".join(texts))
                 if met:
                     self.found_lines(frame, det, target, texts, results)
@@ -478,7 +478,7 @@ class Bot:
                     continue
 
             positives = [i for i, r in enumerate(results) if r["kind"] == "positive"]
-            if target != "off" and det.cube and not cp_also:
+            if target != "off" and det.cube and (not cp_also or lines.needs_cp(target)):
                 positives = []                   # only the line target counts
             if positives:
                 best = max(positives, key=lambda i: results[i]["value"])

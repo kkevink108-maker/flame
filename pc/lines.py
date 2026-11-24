@@ -7,13 +7,16 @@ import re
 
 import cv2
 
-# name -> (label, kinds that count, lines needed)
+# name -> (label, kinds that count, lines needed, Combat Power must also go up)
 TARGETS = {
-    "off": ("OFF", (), 0),
-    "drop2": ("2 DROP", ("drop",), 2),
-    "meso2": ("2 MESO", ("meso",), 2),
-    "dropmeso2": ("2 DROP/MESO", ("drop", "meso"), 2),
-    "dropmeso3": ("3 DROP/MESO", ("drop", "meso"), 3),
+    "off": ("OFF", (), 0, False),
+    "drop1cp": ("1 DROP + CP+", ("drop",), 1, True),
+    "drop2cp": ("2 DROP + CP+", ("drop",), 2, True),
+    "meso1cp": ("1 MESO + CP+", ("meso",), 1, True),
+    "drop2": ("2 DROP", ("drop",), 2, False),
+    "meso2": ("2 MESO", ("meso",), 2, False),
+    "dropmeso2": ("2 DROP/MESO", ("drop", "meso"), 2, False),
+    "dropmeso3": ("3 DROP/MESO", ("drop", "meso"), 3, False),
 }
 ORDER = list(TARGETS)
 
@@ -65,9 +68,14 @@ def kind(text):
     return None
 
 
-def check(target, texts):
-    """-> (met, count, kinds of each line)."""
-    _, wanted, need = TARGETS[target]
+def needs_cp(target):
+    """Targets like "1 DROP + CP+": a Combat Power gain alone must not stop the bot."""
+    return TARGETS[target][3]
+
+
+def check(target, texts, cp_up=False):
+    """-> (met, count, kinds of each line). cp_up: the AFTER Combat Power change is positive."""
+    _, wanted, need, with_cp = TARGETS[target]
     kinds = [kind(t) for t in texts]
     count = sum(k in wanted for k in kinds)
-    return need > 0 and count >= need, count, kinds
+    return need > 0 and count >= need and (cp_up or not with_cp), count, kinds

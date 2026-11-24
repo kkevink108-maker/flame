@@ -281,8 +281,11 @@ class Monitor:
         text(x, 116, "Cube lines:")
         x += 110
         x = button(x, 2, lines.TARGETS[line_target][0], line_target != "off", st.cycle_target, 150)
-        x = button(x, 2, "CP+ ALSO" if cp_also or line_target == "off" else "CP+ OFF",
-                   cp_also or line_target == "off", st.toggle_cp_also, 100)
+        if lines.needs_cp(line_target):          # the target itself needs the CP gain
+            x = button(x, 2, "CP+ NEEDED", True, lambda: None, 110)
+        else:
+            x = button(x, 2, "CP+ ALSO" if cp_also or line_target == "off" else "CP+ OFF",
+                       cp_also or line_target == "off", st.toggle_cp_also, 110)
         if line_target != "off":
             text(x + 6, 116, lines_seen[:60], (170, 170, 170), 0.45)
 
