@@ -5,8 +5,8 @@ when one needs you. It has two watchers, each in its own section with its own st
 alarm sound:
 
 - **Aurelia's Elixir** (or any buff): alarms when the icon disappears.
-- **Stack counter** (e.g. the dice buff): alarms when the icon's number shows the value it had
-  when you boxed it (e.g. 2).
+- **Stack counter** (e.g. the dice buff): alarms when the icon's number reaches the number you
+  choose (default 2). Box it at any number, e.g. while it's 1.
 
 Each can be turned off with its **Watch** checkbox and renamed.
 
@@ -17,7 +17,8 @@ Each can be turned off with its **Watch** checkbox and renamed.
 3. In a watcher's section click **Box buff area**, then drag around the buff icon block on the game screen.
 4. In that section's zoomed view, drag a tight box around the icon.
    - Elixir: while the buff is on.
-   - Stack counter: while it shows the number you want to be warned about, number included.
+   - Stack counter: while it shows any number (e.g. 1), number included. Type the number to alarm
+     at under its icon.
 5. Leave the page open in its own browser window. It keeps checking while it's behind the game.
 
 **Redo a box any time:** drag on the game screen to redo an area (the chips above the screen
@@ -44,14 +45,18 @@ cutoff is set halfway between the two. Use **Recalibrate** any time the icon is 
   (another icon slid in) for three checks in a row;
 - after 1.5 s (adjustable) when something moving, like damage numbers, covers it.
 
-**Stack counter:** the icon is found by the part above its number. The number is read by comparing
-its white digit pixels with the ones you boxed (best overlap within ±2 px; 70% needed). Only
+**Stack counter:** the icon is found by the part above its number. The boxed number only tells it
+where the number sits. The live number is compared with the alarm number drawn in the game's own
+5×7 digit font (built in, taken from screenshots), right-aligned at that spot (best overlap within
+±3 px; 80% needed). Only
 digit-shaped strokes count: bright, 1 px thin, outlined by darker pixels and sitting on the number's
 baseline. Light map background showing through a round icon is ignored, so changing maps doesn't
-break it. The section shows the boxed number next to what it reads now. A wider
+break it. The section shows the alarm number next to what it reads now. A wider
 number such as 12 doesn't count as 2. Two checks in a row at the boxed number → alarm (rising
 chimes + voice). If it shows that number at setup, it stays quiet until the number changes. The
 alarm stops once a different number shows, or the icon is gone for 3 s.
 
 If the game picture stops changing for 20 s (e.g. the game was minimized) it also alarms, because
-it can no longer see the buffs.
+it can no longer see the buffs. That alarm can be turned off under **Alarm**.
+
+**Pause** (top of the page) stops all checks and alarms until you click **Resume**, e.g. while AFK.

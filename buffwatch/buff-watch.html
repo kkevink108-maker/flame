@@ -45,6 +45,8 @@ header .sub{color:var(--muted);flex:1 1 260px;min-width:0}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:600}
 .btn.small{padding:5px 10px;font-size:13px}
+#btnPause[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#2a1a00;font-weight:600}
+.status.paused{border-color:var(--warn);opacity:.8} .status.paused .big{color:var(--warn)}
 .card h2 .btn.small{margin-block:-6px}
 .invisible{visibility:hidden}
 .btn.on{border-color:var(--wc,var(--gold));color:var(--wc,var(--gold))}
@@ -140,6 +142,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
     <div class="sub">Watches buff icons on your shared game window and sounds an alarm when one needs you.</div>
     <div class="btns">
       <button class="btn primary" id="btnShare">Share game window</button>
+      <button class="btn" id="btnPause" aria-pressed="false">Pause</button>
       <button class="btn" id="btnStop" hidden>Stop sharing</button>
       <label class="btn" id="lblShot" title="Load a screenshot to try the setup without sharing">Try a screenshot<input type="file" id="fileShot" accept="image/*"></label>
     </div>
@@ -167,6 +170,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
           <input type="range" id="inVol" min="0" max="100" step="5">
         </div>
         <label class="check"><input type="checkbox" id="inVoice"> Also speak the alert out loud</label>
+        <label class="check"><input type="checkbox" id="inFrozen"> Alarm when the game picture freezes (e.g. game minimized)</label>
         <details>
           <summary>Fine-tuning</summary>
           <div class="inner">
@@ -211,14 +215,15 @@ const $ = id => document.getElementById(id);
 const STORE_KEY = 'buffwatch.v4', OLD_KEY = 'buffwatch.v3';
 
 /* ---------------- shared settings ---------------- */
-const G = { tol: 100, interval: 250, volume: 0.6, voice: true };
+const G = { tol: 100, interval: 250, volume: 0.6, voice: true, frozenAlarm: true };
+let paused = false; // Pause button: no checks, no alarms
 
 /* ---------------- watchers ---------------- */
 // presence: alarm when the icon disappears.  count: alarm when the icon's number shows the boxed value.
 function makeWatcher(o) {
   return Object.assign({
     enabled: true, name: '', target: '2',
-    threshold: 0.70, ignoreBottom: 0.30, graceMs: 1500, digitNeed: 0.70,
+    threshold: 0.70, ignoreBottom: 0.30, graceMs: 1500, digitNeed: 0.80,
     area: null, tplRect: null, tpl: null, tplURL: null, savedFrame: null, calibInfo: null,
     prepared: null, digit: null,
     last: null, lastArea: null, anchor: null, calib: null, alarmOn: false, silenced: false,
@@ -274,6 +279,7 @@ function load() {
   W.forEach(w => {
     const s = d.ws && d.ws[w.id]; if (!s) return;
     PERSIST.forEach(k => { if (s[k] != null) w[k] = s[k]; });
+    if (w.digitNeed === 0.7) w.digitNeed = 0.8; // old default; the built-in digit shapes match exactly
     if (w.tplURL) {
       const url = w.tplURL, img = new Image();
       img.onload = () => {
@@ -509,33 +515,49 @@ function brightMap(d, imgW, imgH, rx, ry, rw, rh) {
   }
   return { m, L };
 }
-// The stack number in the boxed icon: the rightmost digit-shaped blob in its lower half, plus any
-// digits right next to it on the same baseline.
-function findDigit(tpl) {
+// The game's small number font (5×7, the same in buff stacks and the EXP bar), taken from screenshots.
+const FONT = {
+  0: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  1: ['.#', '##', '.#', '.#', '.#', '.#', '.#'],
+  2: ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+  3: ['.###.', '#...#', '....#', '..##.', '....#', '#...#', '.###.'],
+  4: ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
+  5: ['#####', '#....', '#....', '.###.', '....#', '#...#', '.###.'],
+  6: ['.###.', '#...#', '#....', '####.', '#...#', '#...#', '.###.'],
+  7: ['#####', '....#', '....#', '...#.', '...#.', '..#..', '..#..'],
+  8: ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+  9: ['.###.', '#...#', '#...#', '.####', '....#', '#...#', '.###.'],
+};
+const GAP = 2; // blank columns between digits
+// Where the stack number sits in the boxed icon (whatever number it showed): the right edge and the
+// bottom row of the rightmost digit-shaped blob in its lower half.
+function findNumberPos(tpl) {
   const tw = tpl.width, h = tpl.height, top = Math.floor(h * 0.45), rh = h - top;
   const all = glyphs(brightMap(tpl.data, tw, h, 0, top, tw, rh), tw, rh);
   if (!all.length) return null;
   all.sort((a, b) => b.x1 - a.x1);
-  const pick = [all[0]];
-  for (const g of all.slice(1)) {
-    const left = pick[pick.length - 1];
-    if (Math.abs(g.y1 - all[0].y1) <= 1 && left.x0 - g.x1 <= 3) pick.push(g);
-  }
-  const gx0 = Math.min(...pick.map(g => g.x0)), gx1 = Math.max(...pick.map(g => g.x1));
-  const gy0 = Math.min(...pick.map(g => g.y0)) + top, gy1 = Math.max(...pick.map(g => g.y1)) + top;
-  // Window: the number plus room to its left, so a wider number (12, 20…) never reads as the boxed one.
-  const wx = Math.max(0, gx0 - 9), wx1 = Math.min(tw - 1, gx1 + 1), wy = Math.max(0, gy1 - 10), wy1 = Math.min(h - 1, gy1 + 1);
-  const ww = wx1 - wx + 1, wh = wy1 - wy + 1, mask = new Uint8Array(ww * wh);
-  let n = 0;
-  for (const g of pick) for (const c of g.px) {
-    const cx = c % tw, cy = (c - cx) / tw + top;
-    mask[(cy - wy) * ww + (cx - wx)] = 1; n++;
-  }
-  return { wx, wy, ww, wh, mask, n, base: gy1 - wy };
+  return { right: all[0].x1, base: all[0].y1 + top };
 }
-// How closely the number at a found icon matches the boxed one: overlap of digit-shaped white
-// pixels on the right baseline, best of ±2 px.
-const PAD = 2;
+// The alarm number drawn in the game's font, right-aligned where the icon's number sits, inside a
+// window with room to its left so a wider number (12, 20…) never reads as it.
+function buildTarget(pos, target) {
+  const digits = String(target || '').trim();
+  if (!pos || !/^\d{1,3}$/.test(digits)) return null;
+  const gl = [...digits].map(c => FONT[c]);
+  const tw = gl.reduce((a, g) => a + g[0].length, 0) + GAP * (gl.length - 1);
+  const x0 = pos.right - tw + 1;
+  const wx = x0 - 9, wy = pos.base - 10, ww = pos.right + 2 - wx, wh = 12;
+  const mask = new Uint8Array(ww * wh);
+  let cx = x0 - wx, n = 0;
+  for (const g of gl) {
+    for (let j = 0; j < 7; j++) for (let i = 0; i < g[j].length; i++) if (g[j][i] === '#') { mask[(pos.base - 6 - wy + j) * ww + cx + i] = 1; n++; }
+    cx += g[0].length + GAP;
+  }
+  return { wx, wy, ww, wh, mask, n, base: pos.base - wy };
+}
+// How closely the number at a found icon matches the alarm number: overlap of digit-shaped white
+// pixels on the right baseline, best of ±3 px.
+const PAD = 3;
 function readDigit(img, D, x, y) {
   const W2 = D.ww + PAD * 2, H2 = D.wh + PAD * 2;
   const all = glyphs(brightMap(img.data, img.width, img.height, x + D.wx - PAD, y + D.wy - PAD, W2, H2), W2, H2);
@@ -551,7 +573,7 @@ function readDigit(img, D, x, y) {
     const sc = uni ? inter / uni : 0;
     if (sc > best) { best = sc; bx = ox; by = oy; }
   }
-  const view = new Uint8Array(D.ww * D.wh); // what it read, lined up with the boxed number
+  const view = new Uint8Array(D.ww * D.wh); // what it read, lined up with the alarm number
   for (let j = 0; j < D.wh; j++) for (let i = 0; i < D.ww; i++) view[j * D.ww + i] = live[(j + by) * W2 + i + bx];
   return { score: best, view };
 }
@@ -559,13 +581,14 @@ function readDigit(img, D, x, y) {
 // so up to a third of the icon can be covered (mouse, tooltip, damage numbers) without a false alarm.
 const GX = 3, GY = 3, KEEP = 6;
 function prepare(w) {
-  w.prepared = null; w.digit = null;
+  w.prepared = null; w.digit = null; w.numPos = null;
   const tpl = w.tpl;
   if (!tpl) return;
   let th;
   if (w.kind === 'count') {
-    w.digit = findDigit(tpl);
-    th = w.digit ? Math.max(4, w.digit.wy) : Math.round(tpl.height * 0.7); // find the icon by the part above the number
+    w.numPos = findNumberPos(tpl);
+    w.digit = buildTarget(w.numPos, w.target);
+    th = w.numPos ? Math.max(4, w.numPos.base - 7) : Math.round(tpl.height * 0.7); // find the icon by the part above the number
   } else th = Math.max(4, Math.round(tpl.height * (1 - w.ignoreBottom)));
   const tw = tpl.width;
   const step = tw * th > 1800 ? 2 : 1;
@@ -676,7 +699,7 @@ function frameChanged() {
 /* ---------------- the check ---------------- */
 const ready = w => w.enabled && w.area && w.prepared && (w.kind !== 'count' || w.digit);
 async function tick() {
-  if (busy || !source) return;
+  if (busy || !source || paused) return;
   busy = true;
   const t0 = performance.now();
   try {
@@ -686,7 +709,7 @@ async function tick() {
     const moving = frameChanged();
     if (moving) { frozenSince = null; if (frozen) { frozen = false; frozenSilenced = false; log('Game picture is moving again.', 'ok'); } }
     else if (!frozenSince) frozenSince = now;
-    else if (!frozen && now - frozenSince > FROZEN_MS) { frozen = true; frozenRings = 0; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
+    else if (!frozen && G.frozenAlarm && now - frozenSince > FROZEN_MS) { frozen = true; frozenRings = 0; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
     const img = grab();
     for (const w of W) {
       if (!ready(w) || (mode && mode.w === w)) continue;
@@ -772,6 +795,7 @@ function updateCount(w, res, now) {
   }
 }
 function ring(now) {
+  if (paused) return;
   const items = W.filter(w => w.enabled && w.alarmOn && !w.silenced);
   if (frozen && !frozenSilenced) items.push('frozen');
   setTitle();
@@ -790,7 +814,7 @@ function ring(now) {
 function setTitle() {
   const alerts = W.filter(w => w.enabled && w.alarmOn && !w.silenced).map(w => w.kind === 'presence' ? 'MISSING' : 'AT ' + w.target);
   if (frozen && !frozenSilenced) alerts.push('FROZEN');
-  document.title = alerts.length ? '⚠ ' + alerts.join(' · ') : 'Buff Watch';
+  document.title = paused ? 'Buff Watch (paused)' : alerts.length ? '⚠ ' + alerts.join(' · ') : 'Buff Watch';
 }
 function startCalibration(w) {
   if (!source || !ready(w)) return;
@@ -1023,8 +1047,8 @@ function finishIcon(w, r) {
   const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, f);
   w.tplRect = abs;
   setTemplate(w, readRegion(snap, abs));
-  if (w.kind === 'count' && !w.digit) {
-    log(w.name + ': no number found in that box. Box the icon, number included, while it shows ' + w.target + '.', 'bad');
+  if (w.kind === 'count' && !w.numPos) {
+    log(w.name + ': no number found in that box. Box the icon, number included, while it shows a number.', 'bad');
     hint('<b>' + escapeHTML(w.name) + ':</b> no number found in that box. Drag again around the whole icon, number included.', true);
     return; // stay in icon mode so they can try again
   }
@@ -1068,7 +1092,7 @@ function buildWatcher(w) {
     <div class="meter" title="How closely the best spot matches the boxed icon"><i></i><u></u></div>
     <dl class="kv">
       <dt>Icon match</dt><dd class="kScore">–</dd>
-      ${presence ? '' : '<dt>Number match</dt><dd class="kDigit">–</dd><dt>Number boxed · read now</dt><dd class="digits"><canvas class="dRef" width="1" height="1"></canvas><canvas class="dLive" width="1" height="1"></canvas></dd>'}
+      ${presence ? '' : '<dt>Number match</dt><dd class="kDigit">–</dd><dt>Alarm number · read now</dt><dd class="digits"><canvas class="dRef" width="1" height="1"></canvas><canvas class="dLive" width="1" height="1"></canvas></dd>'}
       <dt>${presence ? 'Last seen' : 'Last at target'}</dt><dd class="kSeen">–</dd>
       <dt>Check time</dt><dd class="kMs">–</dd>
     </dl>
@@ -1087,7 +1111,7 @@ function buildWatcher(w) {
       <canvas class="refc" width="1" height="1"></canvas>
       <div class="fields">
         <div class="field"><label for="${id('name')}">Name</label><input type="text" id="${id('name')}" maxlength="40"></div>
-        ${presence ? '' : `<div class="field"><label for="${id('target')}">Number it shows when you box it</label><input type="text" id="${id('target')}" maxlength="4" inputmode="numeric"><small>Used for labels and the spoken alert.</small></div>`}
+        ${presence ? '' : `<div class="field"><label for="${id('target')}">Alarm when it shows</label><input type="text" id="${id('target')}" maxlength="3" inputmode="numeric"><small>Box the icon at any number (for example while it's 1); it alarms when it shows this one.</small></div>`}
       </div>
     </div>
     <p class="note"></p>
@@ -1141,7 +1165,12 @@ function buildWatcher(w) {
     save(); refreshUI();
   });
   E.name.addEventListener('input', () => { w.name = E.name.value.trim() || 'Buff'; save(); refreshUI(); });
-  if (E.target) E.target.addEventListener('input', () => { w.target = E.target.value.trim() || '?'; save(); refreshUI(); });
+  if (E.target) E.target.addEventListener('input', () => {
+    w.target = E.target.value.trim();
+    w.digit = buildTarget(w.numPos, w.target);
+    w.alarmOn = false; w.silenced = false; w.hitStreak = 0; w.clearStreak = 0;
+    drawRef(w); save(); refreshUI();
+  });
   if (E.grace) E.grace.addEventListener('input', () => { w.graceMs = +E.grace.value; syncFields(w); save(); });
   E.thr.addEventListener('input', () => { w.threshold = E.thr.value / 100; syncFields(w); save(); refreshStatus(); });
   if (E.ign) E.ign.addEventListener('input', () => { w.ignoreBottom = E.ign.value / 100; prepare(w); drawRef(w); syncFields(w); save(); });
@@ -1191,14 +1220,15 @@ function refreshUI() {
     if (zoomOn) sizeZoom(w);
     syncFields(w);
   }
-  if (frozen && !frozenSilenced) hint('<b>Game picture froze.</b> The picture stopped changing for 20 s, so the buffs can\'t be checked. Is MapleStory minimized?', true);
+  if (paused) hint('<b>Paused.</b> Nothing is checked and no alarm will sound. Click <b>Resume</b> when you\'re back.', true);
+  else if (frozen && !frozenSilenced) hint('<b>Game picture froze.</b> The picture stopped changing for 20 s, so the buffs can\'t be checked. Is MapleStory minimized?', true);
   else if (!has) hint(W.some(w => w.prepared)
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
     : 'Click <b>Share game window</b> and choose the MapleStory window.');
   else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block. The picture pauses while you drag.');
   else if (mode && mode.step === 'icon') hint(mode.w.kind === 'presence'
     ? 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon. The buff must be on right now.'
-    : 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon, <b>number included</b>. It must show <b>' + escapeHTML(mode.w.target) + '</b> right now.');
+    : 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon, <b>number included</b>. Any number is fine (for example while it\'s 1).');
   else if (W.some(ready)) hint('<b>Watching.</b> Leave this window open. To redo a box, drag on the game screen (area) or in a zoomed view (icon).');
   else hint('Set up a buff below: click <b>Box buff area</b> in its section.');
   $('btnFrozenSilence').hidden = !(frozen && !frozenSilenced);
@@ -1213,6 +1243,10 @@ function refreshStatus() {
     let big, small;
     const editing = mode && mode.w === w;
     if (!w.enabled) { st.classList.add('off'); big = 'OFF'; small = 'Tick "Watch" to turn it on.'; }
+    else if (paused) { st.classList.add('paused'); big = 'PAUSED'; small = 'Click Resume at the top to watch again.'; }
+    else if (w.kind === 'count' && w.numPos && !w.digit && !editing) {
+      st.classList.add('pending'); big = 'WHICH NUMBER?'; small = 'Type the number to alarm at (for example 2) under the icon below.';
+    }
     else if (!ready(w) || !source || editing) {
       big = editing ? 'SETTING UP' : (!source && w.prepared ? 'READY' : 'NOT SET UP');
       small = editing ? 'Follow the instructions above the game screen.'
@@ -1244,10 +1278,10 @@ function refreshStatus() {
     E.bSilence.disabled = !w.alarmOn || w.silenced;
     E.bRecal.disabled = !ready(w) || !source || !!w.calib || !!editing;
     E.note.textContent = w.calibInfo
-      ? 'Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' + (w.kind === 'count' && w.digit ? ' Number: ' + w.digit.n + ' white pixels, framed in the picture.' : '')
+      ? 'Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' + (w.kind === 'count' && w.numPos ? ' The framed spot is where it reads the number.' : '')
       : w.kind === 'presence'
         ? 'Box the icon while the buff is on. It then measures itself for 2 s.'
-        : 'Box the icon while it shows ' + w.target + ', number included. It then measures itself for 2 s.';
+        : 'Box the icon while it shows any number (for example 1), number included. It then measures itself for 2 s.';
   }
 }
 
@@ -1261,11 +1295,17 @@ function bindSettings() {
   $('inTol').value = G.tol;
   $('inRate').value = String(G.interval);
   $('inVoice').checked = G.voice;
+  $('inFrozen').checked = G.frozenAlarm;
   show();
   $('inVol').addEventListener('input', e => { G.volume = e.target.value / 100; show(); save(); });
   $('inTol').addEventListener('input', e => { G.tol = +e.target.value; show(); save(); });
   $('inRate').addEventListener('change', e => { G.interval = +e.target.value; save(); if (ticker) startTicker(); });
   $('inVoice').addEventListener('change', e => { G.voice = e.target.checked; save(); });
+  $('inFrozen').addEventListener('change', e => {
+    G.frozenAlarm = e.target.checked;
+    if (!G.frozenAlarm) { frozen = false; frozenSince = null; }
+    save(); refreshUI(); setTitle();
+  });
 }
 
 W.forEach(buildWatcher);
@@ -1282,6 +1322,21 @@ W.forEach(w => {
   $('areaFor').append(b);
 });
 $('btnShare').addEventListener('click', startShare);
+function setPaused(on) {
+  paused = on;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  // Start fresh either way, so nothing that happened while paused counts.
+  frozen = false; frozenSince = null; prevSig = null; frozenSilenced = false;
+  W.forEach(w => {
+    w.alarmOn = false; w.silenced = false; w.missStreak = 0; w.missSince = null; w.stillMisses = 0;
+    w.prevPatch = null; w.hitStreak = 0; w.clearStreak = 0; w.lostSince = null; w.last = null;
+  });
+  const b = $('btnPause');
+  b.textContent = on ? 'Resume' : 'Pause'; b.setAttribute('aria-pressed', String(on));
+  log(on ? 'Paused: no checks, no alarms.' : 'Resumed watching.');
+  setTitle(); refreshUI();
+}
+$('btnPause').addEventListener('click', () => { ensureAudio(); setPaused(!paused); });
 $('btnStop').addEventListener('click', () => { stopSource(); log('Screen sharing stopped.'); refreshUI(); });
 $('fileShot').addEventListener('change', e => { useScreenshot(e.target.files[0]); e.target.value = ''; });
 $('btnCancel').addEventListener('click', cancelMode);
