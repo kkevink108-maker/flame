@@ -33,19 +33,6 @@ from monitor import MODES, Monitor, State, fmt_result
 
 from paths import DATA_DIR, RESOURCE_DIR
 
-# Be a polite background program: don't spread image work over every CPU core,
-# and let games and other programs go first when the PC is busy.
-cv2.setNumThreads(2)
-if sys.platform == "win32":
-    try:
-        import ctypes
-        BELOW_NORMAL_PRIORITY_CLASS = 0x4000
-        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(),
-                                                BELOW_NORMAL_PRIORITY_CLASS)
-    except Exception:
-        pass
-MAX_FPS = 12             # pictures per second at most
-
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 DEBUG_DIR = os.path.join(DATA_DIR, "debug")
 
@@ -323,12 +310,7 @@ class Bot:
         stuck = unreadable = 0
         was_running = False
 
-        last_grab = 0.0
         while not st.quit:
-            wait = last_grab + 1 / MAX_FPS - time.time()
-            if wait > 0:
-                time.sleep(wait)
-            last_grab = time.time()
             with st.lock:
                 new_src, st.new_source = st.new_source, None
             if new_src is not None:          # capture changed from the monitor's WINDOW button
