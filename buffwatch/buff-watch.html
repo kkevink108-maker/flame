@@ -106,6 +106,8 @@ details .inner{display:flex;flex-direction:column;gap:10px}
 .log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:200px;overflow:auto}
 .log li{display:flex;gap:10px}
 .log time{font-family:var(--mono);color:var(--muted);flex:none}
+.log .pic{display:block;max-width:100%;margin-top:4px;border-radius:4px;image-rendering:pixelated}
+.log li{flex-wrap:wrap} .log span{min-width:0;flex:1 1 200px}
 .log .bad{color:var(--bad)} .log .ok{color:var(--ok)}
 .tips{color:var(--muted);font-size:13px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 </style>
@@ -139,7 +141,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
             <button class="btn small" id="btnCancel" hidden>Cancel</button>
           </span>
         </h2>
-        <div class="hint" id="hint">Click <b>Share game window</b>, open the <b>Window</b> tab and pick MapleStory.</div>
+        <div class="hint" id="hint">Click <b>Share game window</b> and choose the MapleStory window.</div>
         <div class="view" id="mainView">
           <div class="empty" id="emptyMain"><strong>No picture yet</strong>Share your MapleStory window. Your last setup is remembered, so next time sharing is the only step.</div>
           <canvas id="mainCanvas" hidden></canvas>
@@ -229,7 +231,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
       <section class="card">
         <h2>Tips</h2>
         <ul class="tips">
-          <li>Keep this page open in its own Chrome window. It keeps watching while it's behind the game.</li>
+          <li>Keep this page open in its own browser window. It keeps watching while it's behind the game.</li>
           <li>Don't minimize MapleStory: a minimized window sends no picture.</li>
           <li>If you resize the game window or change its resolution, redo the two boxes.</li>
           <li>Include the whole buff block in the area: icons shift when other buffs end.</li>
@@ -245,10 +247,10 @@ details .inner{display:flex;flex-direction:column;gap:10px}
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const STORE_KEY = 'buffwatch.v2';
+const STORE_KEY = 'buffwatch.v3';
 
 /* ---------------- settings ---------------- */
-const S = { threshold: 0.70, tol: 100, ignoreBottom: 0.30, interval: 500, misses: 4, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
+const S = { threshold: 0.70, tol: 100, ignoreBottom: 0.30, interval: 500, misses: 6, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
 
 let area = null;        // {x,y,w,h} in frame pixels
 let tplRect = null;     // {x,y,w,h} in frame pixels (where it was boxed)
@@ -273,6 +275,7 @@ let lastArea = null;    // last ImageData of the area
 
 /* ---------------- state ---------------- */
 let missStreak = 0, alarmOn = false, silenced = false, lastSeen = null, lastBeep = 0, beepCount = 0, busy = false;
+let anchor = null;      // where the icon was last seen for sure
 let calib = null;       // {present:[], look:[]} while measuring right after the icon is boxed
 let calibInfo = null;   // {on, look, cut} from the last calibration
 let frozen = false, frozenSince = null, prevSig = null;
@@ -391,7 +394,7 @@ function clampRect(r, f) {
 async function startShare() {
   ensureAudio();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    hint('This browser cannot share a screen here. Open the file in desktop Chrome or Edge.', true);
+    hint('This browser cannot share a screen here. Open the file in desktop Firefox, Chrome or Edge.', true);
     return;
   }
   let stream;
@@ -436,7 +439,7 @@ function onSourceReady() {
     log('Game picture size changed (' + savedFrame.w + '×' + savedFrame.h + ' → ' + f.w + '×' + f.h + '). Redo the boxes.', 'bad');
     area = null; setTemplate(null); calibInfo = null;
   }
-  missStreak = 0; last = null; frozen = false; frozenSince = null; prevSig = null;
+  missStreak = 0; last = null; anchor = null; frozen = false; frozenSince = null; prevSig = null;
   startTicker();
   refreshUI();
   if (!area) beginMode('area');
@@ -453,6 +456,9 @@ function setTemplate(imgData, url, persist = true) {
   drawRef();
   if (persist) save();
 }
+// The icon is split into a 3×3 grid; the score at a spot is the average of its best 6 squares,
+// so up to a third of the icon can be covered (mouse, tooltip, damage numbers) without a false alarm.
+const GX = 3, GY = 3, KEEP = 6;
 function prepare() {
   prepared = null;
   if (!tpl) return;
@@ -461,7 +467,8 @@ function prepare() {
   const pts = [];
   for (let y = 0; y < th; y += step) for (let x = 0; x < tw; x += step) {
     const i = (y * tw + x) * 4;
-    pts.push([x, y, tpl.data[i], tpl.data[i + 1], tpl.data[i + 2]]);
+    const cell = Math.min(GX - 1, Math.floor(x * GX / tw)) + GX * Math.min(GY - 1, Math.floor(y * GY / th));
+    pts.push([x, y, tpl.data[i], tpl.data[i + 1], tpl.data[i + 2], cell]);
   }
   // Deterministic shuffle so mismatches are found early wherever they are.
   let seed = 12345;
@@ -469,13 +476,40 @@ function prepare() {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     const j = seed % (i + 1); const t = pts[i]; pts[i] = pts[j]; pts[j] = t;
   }
-  const s = new Int32Array(pts.length * 5);
-  pts.forEach((p, k) => s.set(p, k * 5));
-  prepared = { s, n: pts.length, tw, th, fullH: tpl.height };
+  const s = new Int32Array(pts.length * 6);
+  pts.forEach((p, k) => s.set(p, k * 6));
+  const cellN = new Int32Array(GX * GY);
+  pts.forEach(p => cellN[p[5]]++);
+  prepared = { s, n: pts.length, tw, th, fullH: tpl.height, cellN };
 }
 // Best position of the template: share of template pixels whose colour is within tolerance.
 // `hint` is where it was last found: trying that spot first lets every other spot bail out early.
 // `skip` {x,y,rx,ry} leaves out positions near a spot (used to find the best look-alike).
+// Occlusion-tolerant score at one spot (see GX/GY/KEEP).
+function robust(img, P, tol, x, y) {
+  const { s, tw, th, cellN } = P, w = img.width, h = img.height, d = img.data;
+  if (x < 0 || y < 0 || x > w - tw || y > h - th) return 0;
+  const hits = new Int32Array(cellN.length);
+  for (let k = 0; k < s.length; k += 6) {
+    const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
+    const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
+    if ((a < 0 ? -a : a) + (b < 0 ? -b : b) + (c < 0 ? -c : c) <= tol) hits[s[k + 5]]++;
+  }
+  const f = Array.from(hits, (v, j) => cellN[j] ? v / cellN[j] : 0).sort((p, q) => q - p);
+  let sum = 0; for (let j = 0; j < KEEP; j++) sum += f[j];
+  return sum / KEEP;
+}
+// Where is it, and how well does it match? Checks the best spot found by the search and the
+// spot it was last seen at (it may be partly covered there, which the search alone can miss).
+function locate(img, P, tol) {
+  const g = match(img, P, tol, anchor);
+  let best = { x: g.x, y: g.y, score: robust(img, P, tol, g.x, g.y), raw: g.score };
+  if (anchor && (anchor.x !== g.x || anchor.y !== g.y)) {
+    const a = robust(img, P, tol, anchor.x, anchor.y);
+    if (a > best.score) best = { x: anchor.x, y: anchor.y, score: a, raw: g.score };
+  }
+  return best;
+}
 function match(img, P, tol, hint, skip) {
   const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
   if (w < tw || h < th) return { score: 0, x: 0, y: 0 };
@@ -485,7 +519,7 @@ function match(img, P, tol, hint, skip) {
   const at = (x, y) => {
     const lim = Math.min(cap, n - bestHits - 1);
     let miss = 0, k = 0;
-    for (; k < L; k += 5) {
+    for (; k < L; k += 6) {
       const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
       const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
       if ((a < 0 ? -a : a) + (b < 0 ? -b : b) + (c < 0 ? -c : c) > tol && ++miss > lim) break;
@@ -526,13 +560,15 @@ async function tick() {
     const r = clampRect(area, f);
     const data = readRegion(grab(), r);
     lastArea = data;
-    const res = match(data, prepared, S.tol, last);
+    const res = locate(data, prepared, S.tol);
     if (calib) {
-      const look = match(data, prepared, S.tol, null, { x: res.x, y: res.y, rx: Math.ceil(prepared.tw * 0.6), ry: Math.ceil(prepared.fullH * 0.6) });
-      calib.present.push(res.score); calib.look.push(look.score);
+      const lk = match(data, prepared, S.tol, null, { x: res.x, y: res.y, rx: Math.ceil(prepared.tw * 0.6), ry: Math.ceil(prepared.fullH * 0.6) });
+      calib.present.push(res.score); calib.look.push(robust(data, prepared, S.tol, lk.x, lk.y));
+      anchor = { x: res.x, y: res.y };
       if (calib.present.length >= CALIB_CHECKS) finishCalibration();
     }
     res.present = res.score >= S.threshold;
+    if (res.present) anchor = { x: res.x, y: res.y };
     last = res;
     $('kvMs').textContent = Math.round(performance.now() - t0) + ' ms';
     if (!calib) update(res); else refreshStatus();
@@ -580,7 +616,7 @@ function update(res) {
     missStreak++;
     if (missStreak >= S.misses && !alarmOn) {
       alarmOn = true; beepCount = 0; lastBeep = 0;
-      log(S.name + ' is missing!', 'bad');
+      log(S.name + ' is missing! (match ' + pct(res.score) + ')', 'bad', lastArea);
     }
   }
   if ((alarmOn || frozen) && !silenced && now - lastBeep > 2400) {
@@ -602,7 +638,7 @@ function stopAlarm() {
 let lastDraw = 0;
 function loop(t) {
   requestAnimationFrame(loop);
-  if (!source || t - lastDraw < 80) return;
+  if (!source || t - lastDraw < (mode || drag ? 60 : 250)) return; // calm preview while just watching
   lastDraw = t;
   drawMain();
   if (mode !== 'icon' && !prepared && area) drawZoomLive();
@@ -737,18 +773,25 @@ function finishIcon(r) {
   setTemplate(readRegion(snap, abs));
   save();
   log('Boxed ' + S.name + ' (' + abs.w + '×' + abs.h + ' icon).');
-  mode = null; missStreak = 0; last = null; lastSeen = Date.now(); calibInfo = null;
+  mode = null; missStreak = 0; last = null; anchor = null; lastSeen = Date.now(); calibInfo = null;
   startCalibration();
   tick();
 }
 
 /* ---------------- UI ---------------- */
 function hint(html, warn) { const h = $('hint'); h.innerHTML = html; h.classList.toggle('warn', !!warn); }
-function log(text, cls) {
+function log(text, cls, pic) {
   const li = document.createElement('li');
   const t = document.createElement('time'); t.textContent = new Date().toLocaleTimeString();
   const s = document.createElement('span'); s.textContent = text; if (cls) s.className = cls;
   li.append(t, s);
+  if (pic) { // what the buff area looked like when the alarm went off
+    const c = document.createElement('canvas'); c.width = pic.width; c.height = pic.height;
+    c.getContext('2d').putImageData(pic, 0, 0);
+    if (last && prepared) { const x = c.getContext('2d'); x.strokeStyle = '#ff4f61'; x.strokeRect(last.x - 0.5, last.y - 0.5, prepared.tw + 1, prepared.fullH + 1); }
+    c.className = 'pic'; c.title = 'The buff area when the alarm went off (red box = where it looked)';
+    s.append(c);
+  }
   const ul = $('log'); ul.prepend(li);
   while (ul.children.length > 40) ul.lastChild.remove();
 }
@@ -781,7 +824,7 @@ function refreshUI() {
 
   if (!has) hint(area && prepared
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
-    : 'Click <b>Share game window</b>, open the <b>Window</b> tab and pick MapleStory.');
+    : 'Click <b>Share game window</b> and choose the MapleStory window.');
   else if (mode === 'area') hint('<b>Step 2.</b> The picture is paused. Drag a box around <b>all</b> your buff icons (top right of the game). Icons move when other buffs end, so take the whole block.');
   else if (mode === 'icon') hint('<b>Step 3.</b> In the zoomed view below, drag a tight box around the <b>' + escapeHTML(S.name) + '</b> icon. Make sure the buff is active right now.');
   else if (prepared) hint('<b>Watching.</b> Leave this window open. You can put the game in front of it.');
