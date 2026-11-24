@@ -830,12 +830,15 @@ function loop(t) {
   if (!source || t - lastDraw < (mode || drag ? 60 : 250)) return; // calm preview while just watching
   lastDraw = t;
   drawMain();
-  W.forEach(w => { if (w.area && !w.prepared && !(mode && mode.w === w && mode.step === 'icon')) drawZoomLive(w); });
+  W.forEach(w => {
+    const boxingIcon = mode && mode.w === w && mode.step === 'icon';
+    if (boxingIcon ? !(drag && drag.canvas === w.el.zoom) : (w.area && !w.prepared)) drawZoomLive(w);
+  });
 }
 function drawMain() {
   const f = frameSize(); if (!f || !f.w) return;
   if (mainCanvas.width !== f.w || mainCanvas.height !== f.h) { mainCanvas.width = f.w; mainCanvas.height = f.h; }
-  mctx.drawImage(mode ? snap : source.el, 0, 0);
+  mctx.drawImage(drag ? snap : source.el, 0, 0); // live picture, paused only while you drag a box
   const lw = Math.max(2, f.w / 450);
   mctx.lineWidth = lw;
   for (const w of W) {
@@ -943,7 +946,9 @@ function attachDrag(c, begin, done, redraw) {
     if (!w) return;
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
+    takeSnapshot(); // pause the picture while this box is drawn
     drag = { canvas: c, w, auto: !wasMode, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    redraw();
   });
   c.addEventListener('pointermove', e => {
     if (!drag || drag.canvas !== c) return;
@@ -968,9 +973,8 @@ function beginMode(w, step, scroll = true) {
   if (!source) { hint('Share your game window first (or load a screenshot), then you can box.', true); return false; }
   if (step === 'icon' && !w.area) step = 'area';
   if (step === 'area') areaFor = w;
-  takeSnapshot();
   mode = { w, step };
-  if (step === 'icon') { drawZoomFrozen(w); if (scroll) w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  if (step === 'icon') { drawZoomLive(w); if (scroll) w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   else if (scroll) $('mainView').scrollIntoView({ behavior: 'smooth', block: 'center' });
   refreshUI();
   return true;
@@ -1009,12 +1013,12 @@ function finishArea(w, r) {
   setTemplate(w, null, null, false); w.calibInfo = null;
   save();
   mode = { w, step: 'icon' };
-  drawZoomFrozen(w);
+  drawZoomLive(w);
   w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
   refreshUI();
 }
 function finishIcon(w, r) {
-  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the icon in the zoomed view.', true); drawZoomFrozen(w); return; }
+  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the icon in the zoomed view.', true); return; }
   const f = frameSize(), a = clampRect(w.area, f);
   const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, f);
   w.tplRect = abs;
@@ -1191,7 +1195,7 @@ function refreshUI() {
   else if (!has) hint(W.some(w => w.prepared)
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
     : 'Click <b>Share game window</b> and choose the MapleStory window.');
-  else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> the picture is paused. Drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block.');
+  else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block. The picture pauses while you drag.');
   else if (mode && mode.step === 'icon') hint(mode.w.kind === 'presence'
     ? 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon. The buff must be on right now.'
     : 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon, <b>number included</b>. It must show <b>' + escapeHTML(mode.w.target) + '</b> right now.');

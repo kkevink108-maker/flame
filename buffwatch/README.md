@@ -24,8 +24,12 @@ Each can be turned off with its **Watch** checkbox and renamed.
 pick which buff it's for), or drag in a buff's zoomed view to redo its icon box. Redoing only the
 area keeps the icon and just re-measures. The **Redo…** buttons in each section do the same.
 
+The game view stays live; it only pauses while you drag a box, and each box is cut from the frame
+at the moment you start dragging.
+
 While you set up one watcher, the others keep watching. The setup is saved in the browser, so
-next time you only click Share. **Try a screenshot** tests a setup on a saved screenshot.
+next time you only click Share. Firefox keeps that saved setup per file name: save new versions over
+the old `buff-watch.html` (not as `buff-watch(6).html`) to keep it. **Try a screenshot** tests a setup on a saved screenshot.
 
 ## How it detects
 
