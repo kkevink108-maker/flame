@@ -4,3 +4,4 @@ mss
 pyserial
 pynput
 rapidocr-onnxruntime
+pygetwindow
