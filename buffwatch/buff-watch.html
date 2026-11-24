@@ -194,9 +194,9 @@ details .inner{display:flex;flex-direction:column;gap:10px}
         </div>
         <label class="check"><input type="checkbox" id="inVoice"> Also say the buff name out loud</label>
         <div class="field">
-          <label for="inMiss">Alarm after it's gone for <span id="vMiss"></span></label>
-          <input type="range" id="inMiss" min="1" max="10" step="1">
-          <small>Short gaps (your mouse over the icon, a blink) are ignored.</small>
+          <label for="inGrace">If something moving covers it, wait <span id="vGrace"></span></label>
+          <input type="range" id="inGrace" min="500" max="4000" step="250">
+          <small>When the potion is really gone, the alarm goes off in about half a second. This wait only applies while something moving (damage numbers, skill effects) is over the icon.</small>
         </div>
         <details>
           <summary>Fine-tuning</summary>
@@ -250,7 +250,7 @@ const $ = id => document.getElementById(id);
 const STORE_KEY = 'buffwatch.v3';
 
 /* ---------------- settings ---------------- */
-const S = { threshold: 0.70, tol: 100, ignoreBottom: 0.30, interval: 500, misses: 6, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
+const S = { threshold: 0.70, tol: 100, ignoreBottom: 0.30, interval: 250, graceMs: 1500, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
 
 let area = null;        // {x,y,w,h} in frame pixels
 let tplRect = null;     // {x,y,w,h} in frame pixels (where it was boxed)
@@ -274,12 +274,12 @@ let last = null;        // last match result {score,x,y,present}
 let lastArea = null;    // last ImageData of the area
 
 /* ---------------- state ---------------- */
-let missStreak = 0, alarmOn = false, silenced = false, lastSeen = null, lastBeep = 0, beepCount = 0, busy = false;
+let missStreak = 0, missSince = null, stillMisses = 0, prevPatch = null, prevPatchKey = '', alarmOn = false, silenced = false, lastSeen = null, lastBeep = 0, beepCount = 0, busy = false;
 let anchor = null;      // where the icon was last seen for sure
 let calib = null;       // {present:[], look:[]} while measuring right after the icon is boxed
 let calibInfo = null;   // {on, look, cut} from the last calibration
 let frozen = false, frozenSince = null, prevSig = null;
-const CALIB_CHECKS = 6, FROZEN_MS = 20000;
+const CALIB_CHECKS = 8, FROZEN_MS = 20000;
 const sigCanvas = document.createElement('canvas'); sigCanvas.width = 64; sigCanvas.height = 36;
 const sigCtx = sigCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -294,6 +294,7 @@ function load() {
   try { d = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
   if (!d) return;
   Object.assign(S, d.S || {});
+  if ('misses' in S) { delete S.misses; S.interval = 250; } // older version: switch to faster checks
   area = d.area || null; tplRect = d.tplRect || null; savedFrame = d.savedFrame || null; calibInfo = d.calibInfo || null;
   if (d.tplURL) {
     const img = new Image();
@@ -399,7 +400,7 @@ async function startShare() {
   }
   let stream;
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 10, max: 15 } }, audio: false });
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 20 } }, audio: false });
   } catch (e) {
     hint('Sharing was cancelled. Click <b>Share game window</b> to try again.', true);
     return;
@@ -419,8 +420,13 @@ function useScreenshot(file) {
   const img = new Image();
   img.onload = () => {
     ensureAudio();
-    const keep = source && source.kind === 'image';
-    if (!keep) stopSource();
+    const f = frameSize();
+    if (source && source.kind === 'image' && f.w === img.naturalWidth && f.h === img.naturalHeight) {
+      source.el = img; // same size: swap the picture and keep watching, like a live share would
+      log('Using screenshot "' + file.name + '".');
+      return;
+    }
+    stopSource();
     source = { kind: 'image', el: img, w: () => img.naturalWidth, h: () => img.naturalHeight };
     log('Using screenshot "' + file.name + '".');
     onSourceReady();
@@ -430,7 +436,7 @@ function useScreenshot(file) {
 function stopSource() {
   if (source && source.track) { try { source.track.stop(); } catch (e) {} }
   if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
-  source = null; stopTicker(); stopAlarm(); mode = null; last = null; missStreak = 0; calib = null; frozen = false; frozenSince = null; prevSig = null;
+  source = null; stopTicker(); stopAlarm(); mode = null; last = null; missStreak = 0; missSince = null; stillMisses = 0; prevPatch = null; calib = null; frozen = false; frozenSince = null; prevSig = null;
 }
 function onSourceReady() {
   const f = frameSize();
@@ -510,15 +516,24 @@ function locate(img, P, tol) {
   }
   return best;
 }
-function match(img, P, tol, hint, skip) {
+// `full` skips the quick pre-check (used when measuring look-alikes during calibration).
+function match(img, P, tol, hint, skip, full) {
   const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
   if (w < tw || h < th) return { score: 0, x: 0, y: 0 };
   const cap = Math.floor(n * 0.8);
+  // Quick pre-check: 24 spread-out pixels; a spot where most of them are wrong is skipped.
+  const preN = full ? 0 : Math.min(24, n), PRE = preN * 6, preMiss = Math.floor(preN * 0.65);
   let bestHits = 0, bx = 0, by = 0;
   const L = s.length;
   const at = (x, y) => {
     const lim = Math.min(cap, n - bestHits - 1);
     let miss = 0, k = 0;
+    for (; k < PRE; k += 6) {
+      const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
+      const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
+      if ((a < 0 ? -a : a) + (b < 0 ? -b : b) + (c < 0 ? -c : c) > tol) miss++;
+    }
+    if (miss > preMiss || miss > lim) return;
     for (; k < L; k += 6) {
       const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
       const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
@@ -532,6 +547,23 @@ function match(img, P, tol, hint, skip) {
     at(x, y);
   }
   return { score: bestHits / n, x: bx, y: by };
+}
+
+// The icon's pixels at a spot, to tell a still picture (a different icon slid in) from moving cover.
+function patchAt(img, P, x, y) {
+  const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
+  if (x < 0 || y < 0 || x > w - tw || y > h - th) return null;
+  const out = new Uint8Array(n * 3);
+  for (let k = 0, j = 0; k < s.length; k += 6, j += 3) {
+    const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
+    out[j] = d[i]; out[j + 1] = d[i + 1]; out[j + 2] = d[i + 2];
+  }
+  return out;
+}
+function changedShare(a, b) {
+  let c = 0;
+  for (let j = 0; j < a.length; j += 3) if (Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]) > 45) c++;
+  return c / (a.length / 3);
 }
 
 // Has the game picture stopped changing? (game minimized, sharing stalled)
@@ -554,7 +586,8 @@ async function tick() {
     const f = frameSize();
     if (!f.w) return;
     const now = Date.now();
-    if (frameChanged()) { frozenSince = null; if (frozen) { frozen = false; log('Game picture is moving again.', 'ok'); } }
+    const moving = frameChanged();
+    if (moving) { frozenSince = null; if (frozen) { frozen = false; log('Game picture is moving again.', 'ok'); } }
     else if (!frozenSince) frozenSince = now;
     else if (!frozen && now - frozenSince > FROZEN_MS) { frozen = true; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
     const r = clampRect(area, f);
@@ -562,16 +595,23 @@ async function tick() {
     lastArea = data;
     const res = locate(data, prepared, S.tol);
     if (calib) {
-      const lk = match(data, prepared, S.tol, null, { x: res.x, y: res.y, rx: Math.ceil(prepared.tw * 0.6), ry: Math.ceil(prepared.fullH * 0.6) });
+      const lk = match(data, prepared, S.tol, null, { x: res.x, y: res.y, rx: Math.ceil(prepared.tw * 0.6), ry: Math.ceil(prepared.fullH * 0.6) }, true);
       calib.present.push(res.score); calib.look.push(robust(data, prepared, S.tol, lk.x, lk.y));
       anchor = { x: res.x, y: res.y };
       if (calib.present.length >= CALIB_CHECKS) finishCalibration();
     }
     res.present = res.score >= S.threshold;
+    // Is the spot where it was last seen showing the same picture as last check?
+    let still = false;
+    if (anchor && !res.present) {
+      const key = anchor.x + ',' + anchor.y, pa = patchAt(data, prepared, anchor.x, anchor.y);
+      if (pa && prevPatch && prevPatchKey === key && moving) still = changedShare(pa, prevPatch) < 0.08;
+      prevPatch = pa; prevPatchKey = key;
+    } else prevPatch = null;
     if (res.present) anchor = { x: res.x, y: res.y };
     last = res;
     $('kvMs').textContent = Math.round(performance.now() - t0) + ' ms';
-    if (!calib) update(res); else refreshStatus();
+    if (!calib) update(res, still); else refreshStatus();
     drawZoom();
   } catch (e) {
     console.error(e);
@@ -582,7 +622,7 @@ async function tick() {
 function startCalibration() {
   if (!source || !prepared || !area) return;
   calib = { present: [], look: [] };
-  stopAlarm(); missStreak = 0;
+  stopAlarm(); missStreak = 0; missSince = null; stillMisses = 0;
   log('Measuring the icon for ' + (CALIB_CHECKS * S.interval / 1000) + ' s. Keep the buff on.');
   refreshUI();
 }
@@ -600,21 +640,25 @@ function finishCalibration() {
   calibInfo = { on, look, cut: S.threshold };
   $('inThr').value = Math.round(S.threshold * 100); $('inThr').dispatchEvent(new Event('input'));
   log('Calibrated: buff on ' + pct(on) + ', look-alikes ' + pct(look) + ' → alarm below ' + pct(S.threshold) + '.', 'ok');
-  lastSeen = Date.now(); missStreak = 0;
+  lastSeen = Date.now(); missStreak = 0; missSince = null;
   save();
   refreshUI();
 }
 function pct(v) { return Math.round(v * 100) + '%'; }
-function update(res) {
+function update(res, still) {
   const now = Date.now();
   if (res.present) {
     if (alarmOn) { log(S.name + ' is back.', 'ok'); chime(); }
-    missStreak = 0; lastSeen = now;
+    missStreak = 0; missSince = null; stillMisses = 0; lastSeen = now;
     if (alarmOn) { stopAlarm(); }
     if (!frozen) silenced = false;
   } else {
+    // Three misses in a row with the spot unchanged = a different icon sits there now: alarm at once.
+    // Otherwise (something moving over it) wait up to graceMs.
+    stillMisses = still && missStreak >= 1 ? stillMisses + 1 : 0;
+    if (!missSince) missSince = now;
     missStreak++;
-    if (missStreak >= S.misses && !alarmOn) {
+    if (!alarmOn && (stillMisses >= 2 || now - missSince >= S.graceMs)) {
       alarmOn = true; beepCount = 0; lastBeep = 0;
       log(S.name + ' is missing! (match ' + pct(res.score) + ')', 'bad', lastArea);
     }
@@ -864,7 +908,7 @@ function refreshStatus() {
     } else if (!last.present) {
       st.classList.add('pending');
       big.textContent = 'CHECKING';
-      small.textContent = 'Not found (' + missStreak + ' of ' + S.misses + ' checks)…';
+      small.textContent = 'Not found for ' + ((Date.now() - (missSince || Date.now())) / 1000).toFixed(1) + ' s…';
     } else {
       st.classList.add('ok');
       big.textContent = 'BUFF ON';
@@ -881,19 +925,18 @@ function refreshStatus() {
 
 /* ---------------- settings controls ---------------- */
 function bindSettings() {
-  const sec = n => (n * S.interval / 1000).toFixed(1).replace(/\.0$/, '') + ' s';
   const show = () => {
     $('vVol').textContent = Math.round(S.volume * 100) + '%';
     $('vThr').textContent = Math.round(S.threshold * 100) + '%';
     $('vTol').textContent = S.tol;
     $('vIgnore').textContent = Math.round(S.ignoreBottom * 100) + '%';
-    $('vMiss').textContent = sec(S.misses) + ' (' + S.misses + ' check' + (S.misses > 1 ? 's' : '') + ')';
+    $('vGrace').textContent = (S.graceMs / 1000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '') + ' s';
   };
   $('inVol').value = Math.round(S.volume * 100);
   $('inThr').value = Math.round(S.threshold * 100);
   $('inTol').value = S.tol;
   $('inIgnore').value = Math.round(S.ignoreBottom * 100);
-  $('inMiss').value = S.misses;
+  $('inGrace').value = S.graceMs;
   $('inRate').value = String(S.interval);
   $('inVoice').checked = S.voice;
   $('inName').value = S.name;
@@ -902,7 +945,7 @@ function bindSettings() {
   $('inThr').addEventListener('input', e => { S.threshold = e.target.value / 100; show(); save(); refreshStatus(); });
   $('inTol').addEventListener('input', e => { S.tol = +e.target.value; show(); save(); });
   $('inIgnore').addEventListener('input', e => { S.ignoreBottom = e.target.value / 100; prepare(); drawRef(); show(); save(); });
-  $('inMiss').addEventListener('input', e => { S.misses = +e.target.value; show(); save(); });
+  $('inGrace').addEventListener('input', e => { S.graceMs = +e.target.value; show(); save(); });
   $('inRate').addEventListener('change', e => { S.interval = +e.target.value; show(); save(); if (ticker) startTicker(); });
   $('inVoice').addEventListener('change', e => { S.voice = e.target.checked; save(); });
   $('inName').addEventListener('input', e => { S.name = e.target.value.trim() || 'Buff'; save(); });

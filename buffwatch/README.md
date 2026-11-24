@@ -16,7 +16,7 @@ The setup is saved in the browser, so next time you only click Share.
 
 ## How it detects
 
-Twice a second it searches the boxed buff area for the icon you boxed, comparing pixel
+Four times a second it searches the boxed buff area for the icon you boxed, comparing pixel
 colours. The match score is the share of icon pixels whose colour lines up. The bottom 30% is
 ignored by default so timer numbers don't matter. The icon is scored as a 3×3 grid using its best 6 squares, so up to a third of it can be covered (mouse, tooltip, damage numbers) without an alarm.
 
@@ -24,6 +24,10 @@ Right after you box the icon it measures itself for 3 s (buff must be on): how w
 matches, and how well the best look-alike elsewhere in the area matches. The alarm cutoff is
 set halfway between the two. Use *Recalibrate* any time the buff is on.
 
-Below the cutoff for 6 checks in a row (3 s) → alarm (beeps + optional voice) until the buff
-is back or you press *Silence*. If the game picture stops changing for 20 s (e.g. the game was
+Alarm (beeps + optional voice) until the buff is back or you press *Silence*:
+- about 0.5 s after it disappears, when its spot shows a different, unchanging picture
+  (another icon slid in) for three checks in a row;
+- after 1.5 s (adjustable) when something moving, like damage numbers, covers it.
+
+If the game picture stops changing for 20 s (e.g. the game was
 minimized) it also alarms, because it can no longer see the buff.
