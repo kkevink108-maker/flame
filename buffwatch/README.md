@@ -20,7 +20,7 @@ Four times a second it searches the boxed buff area for the icon you boxed, comp
 colours. The match score is the share of icon pixels whose colour lines up. The bottom 30% is
 ignored by default so timer numbers don't matter. The icon is scored as a 3×3 grid using its best 6 squares, so up to a third of it can be covered (mouse, tooltip, damage numbers) without an alarm.
 
-Right after you box the icon it measures itself for 3 s (buff must be on): how well the icon
+Right after you box the icon it measures itself for 2 s (buff must be on): how well the icon
 matches, and how well the best look-alike elsewhere in the area matches. The alarm cutoff is
 set halfway between the two. Use *Recalibrate* any time the buff is on.
 

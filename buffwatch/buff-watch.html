@@ -182,7 +182,7 @@ details .inner{display:flex;flex-direction:column;gap:10px}
             <input type="text" id="inName" value="Aurelia's Elixir" maxlength="40">
           </div>
         </div>
-        <p style="margin:0;color:var(--muted);font-size:13px" id="refNote">Box the icon while the buff is active. It then measures itself for 3 s.</p>
+        <p style="margin:0;color:var(--muted);font-size:13px" id="refNote">Box the icon while the buff is active. It then measures itself for 2 s.</p>
         <div class="btns"><button class="btn small" id="btnRecal" disabled>Recalibrate (buff must be on)</button></div>
       </section>
 
@@ -920,7 +920,7 @@ function refreshStatus() {
   $('btnRecal').disabled = !watching || !!calib;
   $('refNote').textContent = calibInfo
     ? 'Calibrated: buff on ' + pct(calibInfo.on) + ', other icons up to ' + pct(calibInfo.look) + '. Alarm below ' + pct(S.threshold) + '.'
-    : 'Box the icon while the buff is active. It then measures itself for 3 s.';
+    : 'Box the icon while the buff is active. It then measures itself for 2 s.';
 }
 
 /* ---------------- settings controls ---------------- */
