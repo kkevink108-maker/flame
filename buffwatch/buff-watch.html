@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buff Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room console. Wide left column = live game view + zoomed buff area; narrow right column = status, reference icon, settings, log. */
+:root{
+  --bg:#0c1020;
+  --panel:#141a2f;
+  --panel-2:#1b2240;
+  --line:#2a3258;
+  --fg:#e7eaf6;
+  --muted:#8e97ba;
+  --gold:#f2c14e;      /* the elixir's ribbon */
+  --gold-ink:#2a1f05;
+  --ok:#41d99a;
+  --bad:#ff4f61;
+  --warn:#ffb547;
+  --display:"Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--body);min-height:100vh}
+button,select,input{font:inherit;color:inherit}
+.wrap{max-width:1400px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+h1{font:700 26px/1 var(--display);letter-spacing:.02em;margin:0;display:flex;align-items:center;gap:10px}
+h1 .gem{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#bff3ff 0%,#6fd3e8 45%,var(--gold) 100%);box-shadow:0 0 0 2px #0006 inset}
+header .sub{color:var(--muted);flex:1 1 260px;min-width:0}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--panel-2);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:600}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
+.btn.small{padding:5px 10px;font-size:13px}
+label.btn{display:inline-flex;align-items:center}
+label.btn input{position:absolute;width:1px;height:1px;opacity:0}
+
+.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+.steps li{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:13px}
+.steps li b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--panel-2);font:600 12px var(--mono);color:var(--muted)}
+.steps li.now{color:var(--fg);border-color:var(--gold)}
+.steps li.now b{background:var(--gold);color:var(--gold-ink)}
+.steps li.done b{background:var(--ok);color:#06281a}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+.hint{border-radius:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--gold);min-height:20px}
+.hint b{color:var(--gold)}
+.hint.warn{border-left-color:var(--warn)}
+.view{position:relative;background:#05070f;border-radius:8px;overflow:hidden;min-height:220px;display:grid;place-items:center}
+.view canvas{display:block;max-width:100%;height:auto;touch-action:none}
+#mainCanvas{width:100%}
+.view.selecting canvas{cursor:crosshair}
+.empty{color:var(--muted);text-align:center;padding:30px 16px;max-width:460px}
+.empty strong{display:block;color:var(--fg);font:600 18px var(--display);margin-bottom:6px}
+#zoomCanvas{image-rendering:pixelated}
+
+/* status */
+.status{border-radius:10px;padding:16px;text-align:center;background:var(--panel-2);border:2px solid var(--line);transition:background .2s,border-color .2s}
+.status .big{font:700 30px/1.1 var(--display);letter-spacing:.04em}
+.status .small{color:var(--muted);margin-top:4px}
+.status.ok{border-color:var(--ok)} .status.ok .big{color:var(--ok)}
+.status.bad{border-color:var(--bad);background:#3a0f18;animation:flash 1s steps(2) infinite} .status.bad .big{color:#fff}
+.status.pending .big{color:var(--warn)}
+@keyframes flash{50%{background:#5c1422}}
+@media (prefers-reduced-motion:reduce){.status.bad{animation:none}}
+.meter{position:relative;height:10px;border-radius:5px;background:#0006;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--muted);width:0;transition:width .2s}
+.meter.ok i{background:var(--ok)} .meter.bad i{background:var(--bad)}
+.meter u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--fg)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.ref{display:flex;gap:12px;align-items:center}
+.ref canvas{width:72px;height:72px;image-rendering:pixelated;border-radius:6px;background:#05070f;border:1px solid var(--line);flex:none}
+.ref p{margin:0;color:var(--muted);font-size:13px}
+
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.field label span{font-family:var(--mono);color:var(--gold);font-variant-numeric:tabular-nums}
+.field small{color:var(--muted);font-size:12px}
+input[type=range]{width:100%;accent-color:var(--gold)}
+input[type=text],select{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+.check{display:flex;gap:8px;align-items:center;font-size:13px}
+.check input{accent-color:var(--gold);width:16px;height:16px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+details[open] summary{margin-bottom:8px}
+details .inner{display:flex;flex-direction:column;gap:10px}
+
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:200px;overflow:auto}
+.log li{display:flex;gap:10px}
+.log time{font-family:var(--mono);color:var(--muted);flex:none}
+.log .bad{color:var(--bad)} .log .ok{color:var(--ok)}
+.tips{color:var(--muted);font-size:13px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="gem" aria-hidden="true"></span>Buff Watch</h1>
+    <div class="sub">Watches one buff icon on your shared game window and sounds an alarm the moment it disappears.</div>
+    <div class="btns">
+      <button class="btn primary" id="btnShare">Share game window</button>
+      <button class="btn" id="btnStop" hidden>Stop sharing</button>
+      <label class="btn" id="lblShot" title="Load a screenshot to try the setup without sharing">Try a screenshot<input type="file" id="fileShot" accept="image/*"></label>
+    </div>
+  </header>
+
+  <ol class="steps" id="steps">
+    <li data-step="1"><b>1</b>Share the MapleStory window</li>
+    <li data-step="2"><b>2</b>Box the buff area</li>
+    <li data-step="3"><b>3</b>Box the potion icon</li>
+    <li data-step="4"><b>4</b>Watching</li>
+  </ol>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <h2>Game screen
+          <span class="btns">
+            <button class="btn small" id="btnArea" disabled>Box buff area</button>
+            <button class="btn small" id="btnIcon" disabled>Box potion icon</button>
+            <button class="btn small" id="btnCancel" hidden>Cancel</button>
+          </span>
+        </h2>
+        <div class="hint" id="hint">Click <b>Share game window</b>, open the <b>Window</b> tab and pick MapleStory.</div>
+        <div class="view" id="mainView">
+          <div class="empty" id="emptyMain"><strong>No picture yet</strong>Share your MapleStory window. Your last setup is remembered, so next time sharing is the only step.</div>
+          <canvas id="mainCanvas" hidden></canvas>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Buff area, zoomed <span id="zoomNote" style="text-transform:none;letter-spacing:0;font-family:var(--body)"></span></h2>
+        <div class="view" id="zoomView">
+          <div class="empty" id="emptyZoom">Once you box the buff area it shows up here, enlarged, so you can box the potion icon precisely.</div>
+          <canvas id="zoomCanvas" hidden></canvas>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <h2>Status</h2>
+        <div class="status" id="status"><div class="big" id="statusBig">NOT SET UP</div><div class="small" id="statusSmall">Finish the steps on the left.</div></div>
+        <div class="meter" id="meter" title="How closely the best spot matches your potion icon"><i id="meterFill"></i><u id="meterMark"></u></div>
+        <dl class="kv">
+          <dt>Match</dt><dd id="kvScore">–</dd>
+          <dt>Last seen</dt><dd id="kvSeen">–</dd>
+          <dt>Check time</dt><dd id="kvMs">–</dd>
+        </dl>
+        <div class="btns">
+          <button class="btn" id="btnSilence" disabled>Silence until it's back</button>
+          <button class="btn" id="btnTest">Test sound</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Watched icon</h2>
+        <div class="ref">
+          <canvas id="refCanvas" width="1" height="1"></canvas>
+          <div class="field" style="flex:1;min-width:0">
+            <label for="inName">Name (for the voice alert)</label>
+            <input type="text" id="inName" value="Aurelia's Elixir" maxlength="40">
+          </div>
+        </div>
+        <p class="ref" style="margin:0"><span style="color:var(--muted);font-size:13px" id="refNote">Box the icon while the buff is active.</span></p>
+      </section>
+
+      <section class="card">
+        <h2>Alarm</h2>
+        <div class="field">
+          <label for="inVol">Volume <span id="vVol"></span></label>
+          <input type="range" id="inVol" min="0" max="100" step="5">
+        </div>
+        <label class="check"><input type="checkbox" id="inVoice"> Also say the buff name out loud</label>
+        <div class="field">
+          <label for="inMiss">Alarm after it's gone for <span id="vMiss"></span></label>
+          <input type="range" id="inMiss" min="1" max="10" step="1">
+          <small>Short gaps (your mouse over the icon, a blink) are ignored.</small>
+        </div>
+        <details>
+          <summary>Fine-tuning</summary>
+          <div class="inner">
+            <div class="field">
+              <label for="inThr">Match needed <span id="vThr"></span></label>
+              <input type="range" id="inThr" min="40" max="95" step="1">
+              <small>Lower it if you get false alarms while the buff is on. Raise it if it misses that the buff is gone.</small>
+            </div>
+            <div class="field">
+              <label for="inTol">Colour tolerance <span id="vTol"></span></label>
+              <input type="range" id="inTol" min="15" max="150" step="5">
+            </div>
+            <div class="field">
+              <label for="inIgnore">Ignore bottom of icon <span id="vIgnore"></span></label>
+              <input type="range" id="inIgnore" min="0" max="50" step="5">
+              <small>Skips the timer/stack numbers drawn over the icon's lower part.</small>
+            </div>
+            <div class="field">
+              <label for="inRate">Checks per second</label>
+              <select id="inRate"><option value="250">4</option><option value="500">2</option><option value="1000">1</option></select>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Log <button class="btn small" id="btnClearLog">Clear</button></h2>
+        <ul class="log" id="log"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Tips</h2>
+        <ul class="tips">
+          <li>Keep this page open in its own Chrome window. It keeps watching while it's behind the game.</li>
+          <li>Don't minimize MapleStory: a minimized window sends no picture.</li>
+          <li>If you resize the game window or change its resolution, redo the two boxes.</li>
+          <li>Include the whole buff block in the area: icons shift when other buffs end.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<video id="video" muted playsinline hidden></video>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'buffwatch.v1';
+
+/* ---------------- settings ---------------- */
+const S = { threshold: 0.70, tol: 70, ignoreBottom: 0.30, interval: 500, misses: 4, volume: 0.6, voice: true, name: "Aurelia's Elixir" };
+
+let area = null;        // {x,y,w,h} in frame pixels
+let tplRect = null;     // {x,y,w,h} in frame pixels (where it was boxed)
+let tpl = null;         // ImageData of the icon
+let tplURL = null;      // PNG data URL for saving
+let savedFrame = null;  // {w,h} frame size at setup
+let prepared = null;
+
+/* ---------------- source ---------------- */
+let source = null;      // {kind:'video'|'image', el, w, h, track, ic}
+const video = $('video');
+const mainCanvas = $('mainCanvas'), mctx = mainCanvas.getContext('2d');
+const zoomCanvas = $('zoomCanvas'), zctx = zoomCanvas.getContext('2d');
+const refCanvas = $('refCanvas'), rctx = refCanvas.getContext('2d');
+const snap = document.createElement('canvas'), sctx = snap.getContext('2d', { willReadFrequently: true });
+const work = document.createElement('canvas'), wctx = work.getContext('2d', { willReadFrequently: true });
+
+let mode = null;        // null | 'area' | 'icon'
+let drag = null;        // {canvas, x0,y0,x1,y1}
+let last = null;        // last match result {score,x,y,present}
+let lastArea = null;    // last ImageData of the area
+
+/* ---------------- state ---------------- */
+let missStreak = 0, alarmOn = false, silenced = false, lastSeen = null, lastBeep = 0, beepCount = 0, busy = false;
+
+/* ---------------- persistence ---------------- */
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ S, area, tplRect, tplURL, savedFrame }));
+  } catch (e) {}
+}
+function load() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+  if (!d) return;
+  Object.assign(S, d.S || {});
+  area = d.area || null; tplRect = d.tplRect || null; savedFrame = d.savedFrame || null;
+  if (d.tplURL) {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+      setTemplate(x.getImageData(0, 0, img.width, img.height), d.tplURL, false);
+      log('Loaded your saved setup.');
+      refreshUI();
+    };
+    img.src = d.tplURL;
+  }
+}
+
+/* ---------------- audio ---------------- */
+let ac = null;
+function ensureAudio() {
+  try {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', ensureAudio, { capture: true });
+document.addEventListener('keydown', ensureAudio, { capture: true });
+
+function beep() {
+  if (!ac) return;
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, S.volume * 0.35);
+  [0, 0.16, 0.32, 0.48].forEach((d, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.value = i % 2 ? 740 : 1175;
+    g.gain.setValueAtTime(0, t + d);
+    g.gain.linearRampToValueAtTime(v, t + d + 0.01);
+    g.gain.setValueAtTime(v, t + d + 0.11);
+    g.gain.linearRampToValueAtTime(0, t + d + 0.13);
+    o.connect(g).connect(ac.destination);
+    o.start(t + d); o.stop(t + d + 0.15);
+  });
+}
+function say(text) {
+  if (!S.voice || !('speechSynthesis' in window) || S.volume === 0) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.volume = Math.min(1, S.volume + 0.2); u.rate = 1.05;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function chime() { // pleasant "it's back" sound
+  if (!ac) return;
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, S.volume * 0.2);
+  [784, 1047].forEach((f, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t + i * 0.12);
+    g.gain.linearRampToValueAtTime(v, t + i * 0.12 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.5);
+    o.connect(g).connect(ac.destination);
+    o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.55);
+  });
+}
+
+/* ---------------- background-safe ticker ---------------- */
+// Timers inside a Worker keep running when this tab is in the background.
+let ticker = null;
+function startTicker() {
+  stopTicker();
+  try {
+    const src = 'let t=null;onmessage=e=>{clearInterval(t);if(e.data>0)t=setInterval(()=>postMessage(0),e.data)}';
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    w.onmessage = tick;
+    w.postMessage(S.interval);
+    ticker = { stop: () => w.terminate() };
+  } catch (e) {
+    const id = setInterval(tick, S.interval);
+    ticker = { stop: () => clearInterval(id) };
+  }
+}
+function stopTicker() { if (ticker) { ticker.stop(); ticker = null; } }
+
+/* ---------------- frames ---------------- */
+function frameSize() { return source ? { w: source.w(), h: source.h() } : null; }
+
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
+// Returns {img, done()} — a drawable holding the newest frame.
+async function grab() {
+  if (source.kind === 'image') return { img: source.el, done() {} };
+  if (source.ic) {
+    try {
+      const bmp = await withTimeout(source.ic.grabFrame(), 700);
+      return { img: bmp, done() { try { bmp.close(); } catch (e) {} } };
+    } catch (e) { /* no new frame yet; fall back to the video element */ }
+  }
+  return { img: video, done() {} };
+}
+function readRegion(img, r) {
+  work.width = r.w; work.height = r.h;
+  wctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  return wctx.getImageData(0, 0, r.w, r.h);
+}
+function clampRect(r, f) {
+  const x = Math.max(0, Math.min(r.x, f.w - 1)), y = Math.max(0, Math.min(r.y, f.h - 1));
+  return { x, y, w: Math.max(1, Math.min(r.w, f.w - x)), h: Math.max(1, Math.min(r.h, f.h - y)) };
+}
+
+async function startShare() {
+  ensureAudio();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    hint('This browser cannot share a screen here. Open the file in desktop Chrome or Edge.', true);
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 10, max: 15 } }, audio: false });
+  } catch (e) {
+    hint('Sharing was cancelled. Click <b>Share game window</b> to try again.', true);
+    return;
+  }
+  stopSource();
+  const track = stream.getVideoTracks()[0];
+  video.srcObject = stream;
+  await video.play().catch(() => {});
+  if (!video.videoWidth) await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+  let ic = null;
+  try { if ('ImageCapture' in window) ic = new ImageCapture(track); } catch (e) {}
+  source = { kind: 'video', el: video, track, ic, w: () => video.videoWidth, h: () => video.videoHeight };
+  track.addEventListener('ended', () => { log('Screen sharing stopped.'); stopSource(); refreshUI(); });
+  onSourceReady();
+}
+function useScreenshot(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    ensureAudio();
+    const keep = source && source.kind === 'image';
+    if (!keep) stopSource();
+    source = { kind: 'image', el: img, w: () => img.naturalWidth, h: () => img.naturalHeight };
+    log('Using screenshot "' + file.name + '".');
+    onSourceReady();
+  };
+  img.src = url;
+}
+function stopSource() {
+  if (source && source.track) { try { source.track.stop(); } catch (e) {} }
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  source = null; stopTicker(); stopAlarm(); mode = null; last = null; missStreak = 0;
+}
+function onSourceReady() {
+  const f = frameSize();
+  mainCanvas.width = f.w; mainCanvas.height = f.h;
+  if (savedFrame && area && (savedFrame.w !== f.w || savedFrame.h !== f.h)) {
+    log('Game picture size changed (' + savedFrame.w + '×' + savedFrame.h + ' → ' + f.w + '×' + f.h + '). Redo the boxes.', 'bad');
+    area = null; setTemplate(null);
+  }
+  missStreak = 0; last = null;
+  startTicker();
+  refreshUI();
+  if (!area) beginMode('area');
+}
+
+/* ---------------- template & matching ---------------- */
+function setTemplate(imgData, url, persist = true) {
+  tpl = imgData; tplURL = imgData ? (url || null) : null;
+  if (tpl && !tplURL) {
+    const c = document.createElement('canvas'); c.width = tpl.width; c.height = tpl.height;
+    c.getContext('2d').putImageData(tpl, 0, 0); tplURL = c.toDataURL('image/png');
+  }
+  prepare();
+  drawRef();
+  if (persist) save();
+}
+function prepare() {
+  prepared = null;
+  if (!tpl) return;
+  const tw = tpl.width, th = Math.max(4, Math.round(tpl.height * (1 - S.ignoreBottom)));
+  const step = tw * th > 1800 ? 2 : 1;
+  const pts = [];
+  for (let y = 0; y < th; y += step) for (let x = 0; x < tw; x += step) {
+    const i = (y * tw + x) * 4;
+    pts.push([x, y, tpl.data[i], tpl.data[i + 1], tpl.data[i + 2]]);
+  }
+  // Deterministic shuffle so mismatches are found early wherever they are.
+  let seed = 12345;
+  for (let i = pts.length - 1; i > 0; i--) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    const j = seed % (i + 1); const t = pts[i]; pts[i] = pts[j]; pts[j] = t;
+  }
+  const s = new Int32Array(pts.length * 5);
+  pts.forEach((p, k) => s.set(p, k * 5));
+  prepared = { s, n: pts.length, tw, th, fullH: tpl.height };
+}
+// Best position of the template in the image: share of template pixels within tolerance.
+// `hint` is where it was last found: trying that spot first lets every other spot bail out early.
+function match(img, P, tol, hint) {
+  const { s, n, tw, th } = P, w = img.width, h = img.height, d = img.data;
+  if (w < tw || h < th) return { score: 0, x: 0, y: 0 };
+  const cap = Math.floor(n * 0.8);
+  let bestHits = 0, bx = 0, by = 0;
+  const L = s.length;
+  const at = (x, y) => {
+    const lim = Math.min(cap, n - bestHits - 1);
+    let miss = 0, k = 0;
+    for (; k < L; k += 5) {
+      const i = ((y + s[k + 1]) * w + x + s[k]) << 2;
+      const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
+      if ((a < 0 ? -a : a) + (b < 0 ? -b : b) + (c < 0 ? -c : c) > tol && ++miss > lim) break;
+    }
+    if (k >= L) { bestHits = n - miss; bx = x; by = y; }
+  };
+  if (hint && hint.x <= w - tw && hint.y <= h - th) at(hint.x, hint.y);
+  for (let y = 0; y <= h - th; y++) for (let x = 0; x <= w - tw; x++) at(x, y);
+  return { score: bestHits / n, x: bx, y: by };
+}
+
+/* ---------------- the check ---------------- */
+async function tick() {
+  if (busy || !source || !prepared || !area || mode) return;
+  busy = true;
+  const t0 = performance.now();
+  let fr = null;
+  try {
+    fr = await grab();
+    const f = frameSize();
+    if (!f.w) return;
+    const r = clampRect(area, f);
+    const data = readRegion(fr.img, r);
+    lastArea = data;
+    const res = match(data, prepared, S.tol, last);
+    res.present = res.score >= S.threshold;
+    last = res;
+    $('kvMs').textContent = Math.round(performance.now() - t0) + ' ms';
+    update(res);
+    drawZoom();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    if (fr) fr.done();
+    busy = false;
+  }
+}
+function update(res) {
+  const now = Date.now();
+  if (res.present) {
+    if (alarmOn) { log(S.name + ' is back.', 'ok'); chime(); }
+    missStreak = 0; lastSeen = now;
+    stopAlarm(); silenced = false;
+  } else {
+    missStreak++;
+    if (missStreak >= S.misses && !alarmOn) {
+      alarmOn = true; beepCount = 0; lastBeep = 0;
+      log(S.name + ' is missing!', 'bad');
+    }
+  }
+  if (alarmOn && !silenced && now - lastBeep > 2400) {
+    lastBeep = now;
+    beep();
+    if (beepCount % 4 === 0) setTimeout(() => say(S.name + ' is gone'), 700);
+    beepCount++;
+  }
+  refreshStatus();
+}
+function stopAlarm() {
+  alarmOn = false;
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+  document.title = 'Buff Watch';
+}
+
+/* ---------------- drawing ---------------- */
+let lastDraw = 0;
+function loop(t) {
+  requestAnimationFrame(loop);
+  if (!source || t - lastDraw < 80) return;
+  lastDraw = t;
+  drawMain();
+  if (mode !== 'icon' && !prepared && area) drawZoomLive();
+}
+function drawMain() {
+  const f = frameSize(); if (!f || !f.w) return;
+  if (mainCanvas.width !== f.w || mainCanvas.height !== f.h) { mainCanvas.width = f.w; mainCanvas.height = f.h; }
+  mctx.drawImage(mode ? snap : source.el, 0, 0);
+  const lw = Math.max(2, f.w / 450);
+  mctx.lineWidth = lw;
+  if (area && mode !== 'area') {
+    mctx.setLineDash([lw * 4, lw * 3]);
+    mctx.strokeStyle = alarmOn ? '#ff4f61' : '#f2c14e';
+    mctx.strokeRect(area.x + lw / 2, area.y + lw / 2, area.w - lw, area.h - lw);
+    mctx.setLineDash([]);
+    if (last && prepared && !mode) {
+      mctx.strokeStyle = last.present ? '#41d99a' : '#ff4f61';
+      mctx.strokeRect(area.x + last.x - lw, area.y + last.y - lw, prepared.tw + lw * 2, prepared.fullH + lw * 2);
+    }
+  }
+  if (drag && drag.canvas === mainCanvas) drawDragRect(mctx, drag, lw);
+}
+function drawDragRect(ctx, dr, lw) {
+  const r = normRect(dr);
+  ctx.fillStyle = 'rgba(242,193,78,.15)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = lw;
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+}
+function sizeZoom() {
+  if (!area) return;
+  const box = $('zoomView').clientWidth || 600;
+  const scale = Math.max(1, Math.min(box / area.w, (window.innerHeight * 0.55) / area.h, 8));
+  zoomCanvas.style.width = Math.floor(area.w * scale) + 'px';
+}
+function drawZoom() {
+  if (!area || !lastArea || mode === 'icon') return;
+  if (zoomCanvas.width !== lastArea.width || zoomCanvas.height !== lastArea.height) {
+    zoomCanvas.width = lastArea.width; zoomCanvas.height = lastArea.height; sizeZoom();
+  }
+  zctx.putImageData(lastArea, 0, 0);
+  if (last && prepared) {
+    zctx.lineWidth = 1;
+    zctx.strokeStyle = last.present ? '#41d99a' : '#ff4f61';
+    zctx.strokeRect(last.x - 0.5, last.y - 0.5, prepared.tw + 1, prepared.fullH + 1);
+    if (prepared.th < prepared.fullH) {
+      zctx.setLineDash([2, 2]);
+      zctx.beginPath(); zctx.moveTo(last.x, last.y + prepared.th + 0.5); zctx.lineTo(last.x + prepared.tw, last.y + prepared.th + 0.5); zctx.stroke();
+      zctx.setLineDash([]);
+    }
+  }
+}
+function drawZoomLive() { // area boxed but no icon yet: keep the zoom showing the picture
+  const f = frameSize(); const r = clampRect(area, f);
+  if (zoomCanvas.width !== r.w || zoomCanvas.height !== r.h) { zoomCanvas.width = r.w; zoomCanvas.height = r.h; sizeZoom(); }
+  zctx.drawImage(source.el, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+}
+function drawZoomFrozen() {
+  const r = clampRect(area, frameSize());
+  zoomCanvas.width = r.w; zoomCanvas.height = r.h; sizeZoom();
+  zctx.drawImage(snap, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  if (drag && drag.canvas === zoomCanvas) drawDragRect(zctx, drag, 1);
+}
+function drawRef() {
+  if (!tpl) { refCanvas.width = 1; refCanvas.height = 1; rctx.clearRect(0, 0, 1, 1); return; }
+  refCanvas.width = tpl.width; refCanvas.height = tpl.height;
+  rctx.putImageData(tpl, 0, 0);
+  const th = Math.max(4, Math.round(tpl.height * (1 - S.ignoreBottom)));
+  if (th < tpl.height) { rctx.fillStyle = 'rgba(12,16,32,.65)'; rctx.fillRect(0, th, tpl.width, tpl.height - th); }
+}
+
+/* ---------------- selecting boxes ---------------- */
+function normRect(d) {
+  return { x: Math.round(Math.min(d.x0, d.x1)), y: Math.round(Math.min(d.y0, d.y1)), w: Math.round(Math.abs(d.x1 - d.x0)), h: Math.round(Math.abs(d.y1 - d.y0)) };
+}
+function toCanvas(c, e) {
+  const b = c.getBoundingClientRect();
+  return { x: Math.max(0, Math.min(c.width, (e.clientX - b.left) * c.width / b.width)), y: Math.max(0, Math.min(c.height, (e.clientY - b.top) * c.height / b.height)) };
+}
+function attachDrag(c, which) {
+  c.addEventListener('pointerdown', e => {
+    if (mode !== which) return;
+    e.preventDefault();
+    c.setPointerCapture(e.pointerId);
+    const p = toCanvas(c, e);
+    drag = { canvas: c, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  });
+  c.addEventListener('pointermove', e => {
+    if (!drag || drag.canvas !== c) return;
+    const p = toCanvas(c, e); drag.x1 = p.x; drag.y1 = p.y;
+    if (c === zoomCanvas) drawZoomFrozen(); else drawMain();
+  });
+  c.addEventListener('pointerup', e => {
+    if (!drag || drag.canvas !== c) return;
+    const r = normRect(drag); drag = null;
+    if (which === 'area') finishArea(r); else finishIcon(r);
+  });
+}
+attachDrag(mainCanvas, 'area');
+attachDrag(zoomCanvas, 'icon');
+
+function takeSnapshot() {
+  const f = frameSize();
+  snap.width = f.w; snap.height = f.h;
+  sctx.drawImage(source.el, 0, 0);
+}
+function beginMode(m) {
+  if (!source) return;
+  if (m === 'icon' && !area) m = 'area';
+  if (m === 'area' || !mode) takeSnapshot();
+  mode = m;
+  if (m === 'icon') { drawZoomFrozen(); $('zoomView').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  refreshUI();
+}
+function cancelMode() { mode = null; drag = null; refreshUI(); }
+function finishArea(r) {
+  if (r.w < 12 || r.h < 12) { hint('That box is too small. Drag around <b>all</b> of your buff icons.', true); return; }
+  area = r; savedFrame = frameSize();
+  setTemplate(null, null, false); last = null;
+  save();
+  log('Buff area set (' + r.w + '×' + r.h + ').');
+  mode = 'icon';
+  drawZoomFrozen();
+  $('zoomView').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  refreshUI();
+}
+function finishIcon(r) {
+  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the potion icon in the zoomed view.', true); return; }
+  const a = clampRect(area, frameSize());
+  const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, frameSize());
+  tplRect = abs;
+  setTemplate(readRegion(snap, abs));
+  save();
+  log('Watching ' + S.name + ' (' + abs.w + '×' + abs.h + ' icon).');
+  mode = null; missStreak = 0; last = null; lastSeen = Date.now();
+  refreshUI();
+  tick();
+}
+
+/* ---------------- UI ---------------- */
+function hint(html, warn) { const h = $('hint'); h.innerHTML = html; h.classList.toggle('warn', !!warn); }
+function log(text, cls) {
+  const li = document.createElement('li');
+  const t = document.createElement('time'); t.textContent = new Date().toLocaleTimeString();
+  const s = document.createElement('span'); s.textContent = text; if (cls) s.className = cls;
+  li.append(t, s);
+  const ul = $('log'); ul.prepend(li);
+  while (ul.children.length > 40) ul.lastChild.remove();
+}
+function currentStep() {
+  if (!source) return 1;
+  if (!area || mode === 'area') return 2;
+  if (!prepared || mode === 'icon') return 3;
+  return 4;
+}
+function refreshUI() {
+  const step = currentStep();
+  document.querySelectorAll('#steps li').forEach(li => {
+    const n = +li.dataset.step;
+    li.classList.toggle('now', n === step);
+    li.classList.toggle('done', n < step);
+  });
+  const has = !!source;
+  $('emptyMain').hidden = has; mainCanvas.hidden = !has;
+  $('btnShare').hidden = has && source.kind === 'video';
+  $('btnStop').hidden = !(has && source.kind === 'video');
+  $('btnArea').disabled = !has || mode === 'area';
+  $('btnIcon').disabled = !has || !area || mode === 'icon';
+  $('btnCancel').hidden = !mode || (mode === 'area' && !area) || (mode === 'icon' && !prepared);
+  $('mainView').classList.toggle('selecting', mode === 'area');
+  $('zoomView').classList.toggle('selecting', mode === 'icon');
+  const zoomOn = has && !!area;
+  $('emptyZoom').hidden = zoomOn; zoomCanvas.hidden = !zoomOn;
+  $('zoomNote').textContent = mode === 'icon' ? '· drag a box around the potion' : (prepared && has ? '· green box = where the potion was found' : '');
+  if (zoomOn) sizeZoom();
+
+  if (!has) hint(area && prepared
+    ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
+    : 'Click <b>Share game window</b>, open the <b>Window</b> tab and pick MapleStory.');
+  else if (mode === 'area') hint('<b>Step 2.</b> The picture is paused. Drag a box around <b>all</b> your buff icons (top right of the game). Icons move when other buffs end, so take the whole block.');
+  else if (mode === 'icon') hint('<b>Step 3.</b> In the zoomed view below, drag a tight box around the <b>' + escapeHTML(S.name) + '</b> icon. Make sure the buff is active right now.');
+  else if (prepared) hint('<b>Watching.</b> Leave this window open. You can put the game in front of it.');
+  refreshStatus();
+}
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function refreshStatus() {
+  const st = $('status'), big = $('statusBig'), small = $('statusSmall');
+  st.classList.remove('ok', 'bad', 'pending');
+  const watching = source && prepared && area && !mode;
+  const meter = $('meter'); meter.classList.remove('ok', 'bad');
+  $('meterMark').style.left = (S.threshold * 100) + '%';
+  if (!watching) {
+    big.textContent = !source && prepared ? 'READY' : 'NOT SET UP';
+    small.textContent = !source ? (prepared ? 'Share your game window to start.' : 'Finish the steps on the left.') : 'Finish boxing the area and icon.';
+    $('meterFill').style.width = '0';
+    $('kvScore').textContent = '–';
+  } else if (!last) {
+    big.textContent = 'STARTING'; small.textContent = 'Taking the first look…';
+  } else {
+    $('meterFill').style.width = (last.score * 100).toFixed(0) + '%';
+    meter.classList.add(last.present ? 'ok' : 'bad');
+    $('kvScore').textContent = (last.score * 100).toFixed(0) + '% (needs ' + Math.round(S.threshold * 100) + '%)';
+    if (alarmOn) {
+      st.classList.add('bad');
+      big.textContent = 'BUFF MISSING';
+      small.textContent = silenced ? 'Alarm silenced until the buff is back.' : S.name + ' is gone. Re-drink it!';
+      document.title = (document.title.startsWith('⚠') ? '!! ' : '⚠ ') + 'BUFF MISSING';
+    } else if (!last.present) {
+      st.classList.add('pending');
+      big.textContent = 'CHECKING';
+      small.textContent = 'Not found (' + missStreak + ' of ' + S.misses + ' checks)…';
+    } else {
+      st.classList.add('ok');
+      big.textContent = 'BUFF ON';
+      small.textContent = S.name + ' is active.';
+    }
+  }
+  $('kvSeen').textContent = lastSeen ? new Date(lastSeen).toLocaleTimeString() : '–';
+  $('btnSilence').disabled = !alarmOn || silenced;
+}
+
+/* ---------------- settings controls ---------------- */
+function bindSettings() {
+  const sec = n => (n * S.interval / 1000).toFixed(1).replace(/\.0$/, '') + ' s';
+  const show = () => {
+    $('vVol').textContent = Math.round(S.volume * 100) + '%';
+    $('vThr').textContent = Math.round(S.threshold * 100) + '%';
+    $('vTol').textContent = S.tol;
+    $('vIgnore').textContent = Math.round(S.ignoreBottom * 100) + '%';
+    $('vMiss').textContent = sec(S.misses) + ' (' + S.misses + ' check' + (S.misses > 1 ? 's' : '') + ')';
+  };
+  $('inVol').value = Math.round(S.volume * 100);
+  $('inThr').value = Math.round(S.threshold * 100);
+  $('inTol').value = S.tol;
+  $('inIgnore').value = Math.round(S.ignoreBottom * 100);
+  $('inMiss').value = S.misses;
+  $('inRate').value = String(S.interval);
+  $('inVoice').checked = S.voice;
+  $('inName').value = S.name;
+  show();
+  $('inVol').addEventListener('input', e => { S.volume = e.target.value / 100; show(); save(); });
+  $('inThr').addEventListener('input', e => { S.threshold = e.target.value / 100; show(); save(); refreshStatus(); });
+  $('inTol').addEventListener('input', e => { S.tol = +e.target.value; show(); save(); });
+  $('inIgnore').addEventListener('input', e => { S.ignoreBottom = e.target.value / 100; prepare(); drawRef(); show(); save(); });
+  $('inMiss').addEventListener('input', e => { S.misses = +e.target.value; show(); save(); });
+  $('inRate').addEventListener('change', e => { S.interval = +e.target.value; show(); save(); if (ticker) startTicker(); });
+  $('inVoice').addEventListener('change', e => { S.voice = e.target.checked; save(); });
+  $('inName').addEventListener('input', e => { S.name = e.target.value.trim() || 'Buff'; save(); });
+}
+
+$('btnShare').addEventListener('click', startShare);
+$('btnStop').addEventListener('click', () => { stopSource(); log('Screen sharing stopped.'); refreshUI(); });
+$('fileShot').addEventListener('change', e => { useScreenshot(e.target.files[0]); e.target.value = ''; });
+$('btnArea').addEventListener('click', () => beginMode('area'));
+$('btnIcon').addEventListener('click', () => beginMode('icon'));
+$('btnCancel').addEventListener('click', cancelMode);
+$('btnSilence').addEventListener('click', () => { silenced = true; try { speechSynthesis.cancel(); } catch (e) {} log('Alarm silenced.'); refreshStatus(); });
+$('btnTest').addEventListener('click', () => { ensureAudio(); setTimeout(() => { beep(); setTimeout(() => say(S.name + ' is gone'), 700); }, 50); });
+$('btnClearLog').addEventListener('click', () => { $('log').innerHTML = ''; });
+window.addEventListener('resize', () => sizeZoom());
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && mode) cancelMode(); });
+
+load();
+bindSettings();
+refreshUI();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
