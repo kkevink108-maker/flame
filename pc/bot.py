@@ -25,6 +25,7 @@ import threading
 import time
 
 import cv2
+import numpy as np
 
 import ocr
 from capture import make_source, normalize
@@ -147,6 +148,32 @@ def read_boxes(frame, det, cfg):
 
 def summary(results):
     return tuple((r["kind"], r["value"]) for r in results)
+
+
+PANEL_CHANGED = 0.15     # share of the text pixels that must differ to count as a new result
+
+
+def panel_sig(frame, det):
+    """Small black-and-white picture of the text above each result number (the cube's
+    potential lines / the flame's total stats). A cube can roll lines worth exactly the
+    same Combat Power as before; the lines themselves still change."""
+    s, out = det.scale, []
+    for x, y, w, h in (det.boxes[1:] if len(det.boxes) > 1 else det.boxes):
+        x0, x1 = max(0, int(x - 10 * s)), int(x + w + 10 * s)
+        y0, y1 = max(0, int(y - 200 * s)), int(y - 4 * s)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        g = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+        g = cv2.resize(g, (220, max(1, round(220 * (y1 - y0) / (x1 - x0)))), interpolation=cv2.INTER_AREA)
+        out.append(g.astype(int) - cv2.blur(g, (15, 15)) > 15)   # text: brighter than around it
+    return out
+
+
+def same_panels(a, b):
+    if a is None or b is None or len(a) != len(b):
+        return False
+    return all(p.shape == q.shape and np.sum(p ^ q) <= PANEL_CHANGED * max(1, np.sum(p | q))
+               for p, q in zip(a, b))
 
 
 def save_debug(frame, det, tag):
@@ -378,9 +405,19 @@ class Bot:
                 prev = cur
                 time.sleep(cfg["stable_gap"])
                 continue
+            sig = panel_sig(frame, det)
 
             if awaiting:
-                if cur == awaiting["before"]:
+                # Same numbers can still be a new result (a cube rolling other lines worth
+                # the same Combat Power): the lines above must differ on two reads in a row.
+                lines_new = cur == awaiting["before"] and not same_panels(sig, awaiting["sig"])
+                if lines_new and not awaiting.get("lines_seen"):
+                    awaiting["lines_seen"] = True
+                    time.sleep(cfg["stable_gap"])
+                    continue
+                if not lines_new:
+                    awaiting["lines_seen"] = False
+                if cur == awaiting["before"] and not lines_new:
                     if time.time() - awaiting["t"] < cfg["change_timeout"]:
                         time.sleep(cfg["stable_gap"])
                         continue
@@ -395,7 +432,7 @@ class Bot:
                     st.set(message=f"Numbers didn't change, clicking Reset again ({stuck}/{cfg['max_retries']})")
                     self.until_wiggle = 1   # retry from a fresh spot on the button
                 else:
-                    # Numbers changed: the reset really happened, count it now.
+                    # Numbers (or the lines above them) changed: the reset really happened.
                     st.add_reset(awaiting["which"], awaiting["cost"])
                     stuck = 0
                 awaiting = None
@@ -453,7 +490,7 @@ class Bot:
                 n, spent = st.run_resets, st.spent_run
             st.set(message=f"Reset {which} pressed ({n} done this run, {spent:,} mesos)")
             cost = cfg["cost_x3"] if which == "x3" else cfg["cost_x1"]
-            awaiting = {"before": cur, "t": time.time(), "which": which, "cost": cost}
+            awaiting = {"before": cur, "sig": sig, "t": time.time(), "which": which, "cost": cost}
             prev = None
             sleep(cfg["delay_after_enters"], j)
 

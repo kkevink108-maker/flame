@@ -1,0 +1,13 @@
+{
+  "source": "image",
+  "discord_webhook": "",
+  "max_resets": 3,
+  "change_timeout": 1.5,
+  "max_retries": 2,
+  "last_found": {
+    "scale": 0.943,
+    "x": 873.2976,
+    "y": 770.3223,
+    "source": "image:0:None:0:null"
+  }
+}
