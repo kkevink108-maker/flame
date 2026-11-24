@@ -45,6 +45,8 @@ header .sub{color:var(--muted);flex:1 1 260px;min-width:0}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:600}
 .btn.small{padding:5px 10px;font-size:13px}
+.card h2 .btn.small{margin-block:-6px}
+.invisible{visibility:hidden}
 .btn.on{border-color:var(--wc,var(--gold));color:var(--wc,var(--gold))}
 label.btn{display:inline-flex;align-items:center}
 label.btn input{position:absolute;width:1px;height:1px;opacity:0}
@@ -57,7 +59,7 @@ label.btn input{position:absolute;width:1px;height:1px;opacity:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .card h2{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
 
-.hint{border-radius:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--gold);min-height:20px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.hint{border-radius:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--gold);min-height:64px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .hint .txt{flex:1 1 280px;min-width:0}
 .hint b{color:var(--gold)}
 .hint.warn{border-left-color:var(--bad)}
@@ -65,7 +67,13 @@ label.btn input{position:absolute;width:1px;height:1px;opacity:0}
 #mainView{min-height:220px}
 .view canvas{display:block;max-width:100%;height:auto;touch-action:none}
 #mainCanvas{width:100%}
-.view.selecting canvas{cursor:crosshair}
+.view.selecting canvas,.view.drawable canvas{cursor:crosshair}
+.chooser{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:3px 12px 3px 8px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.chip::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--wc)}
+.chip[aria-pressed="true"]{border-color:var(--wc);color:var(--fg);box-shadow:0 0 0 1px var(--wc) inset}
+.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .view.selecting{outline:2px solid var(--wc,var(--gold));outline-offset:-2px}
 .empty{color:var(--muted);text-align:center;padding:20px 16px;max-width:460px;font-size:13px}
 .empty strong{display:block;color:var(--fg);font:600 18px var(--display);margin-bottom:6px}
@@ -82,7 +90,7 @@ canvas.zoom{image-rendering:pixelated}
 /* status */
 .status{border-radius:10px;padding:14px;text-align:center;background:var(--panel-2);border:2px solid var(--line);transition:background .2s,border-color .2s}
 .status .big{font:700 26px/1.1 var(--display);letter-spacing:.04em}
-.status .small{color:var(--muted);margin-top:4px;font-size:13px}
+.status .small{color:var(--muted);margin-top:4px;font-size:13px;min-height:2.6em}
 .status.ok{border-color:var(--ok)} .status.ok .big{color:var(--ok)}
 .status.bad{border-color:var(--bad);background:#3a0f18;animation:flash 1s steps(2) infinite} .status.bad .big{color:#fff}
 .status.pending .big{color:var(--warn)}
@@ -140,7 +148,8 @@ details .inner{display:flex;flex-direction:column;gap:10px}
   <div class="grid">
     <div class="col">
       <section class="card">
-        <h2>Game screen <button class="btn small" id="btnCancel" hidden>Cancel boxing</button></h2>
+        <h2>Game screen <button class="btn small invisible" id="btnCancel">Cancel boxing</button></h2>
+        <div class="chooser"><span>Drag on the screen to box the area for</span><span class="chips" id="areaFor" role="group" aria-label="Which buff the area is for"></span></div>
         <div class="view" id="mainView">
           <div class="empty" id="emptyMain"><strong>No picture yet</strong>Share your MapleStory window. Your setup is remembered, so next time sharing is the only step.</div>
           <canvas id="mainCanvas" hidden></canvas>
@@ -429,6 +438,7 @@ function onSourceReady() {
   startTicker();
   refreshUI();
   const first = W.find(w => w.enabled && !w.area);
+  if (first) areaFor = first;
   if (first && !W.some(w => w.prepared)) beginMode(first, 'area');
 }
 
@@ -834,55 +844,89 @@ function toCanvas(c, e) {
   const b = c.getBoundingClientRect();
   return { x: Math.max(0, Math.min(c.width, (e.clientX - b.left) * c.width / b.width)), y: Math.max(0, Math.min(c.height, (e.clientY - b.top) * c.height / b.height)) };
 }
-// `active()` returns the watcher this canvas is boxing for right now, or null.
-function attachDrag(c, active, done, redraw) {
+// Dragging on a canvas boxes something at any time. `begin()` returns the watcher the drag is for
+// (switching into boxing mode, picture paused, if needed) or null. A plain click does nothing.
+function attachDrag(c, begin, done, redraw) {
   c.addEventListener('pointerdown', e => {
-    if (!active()) return;
+    if (e.button) return;
+    const wasMode = !!mode;
+    const p = toCanvas(c, e); // before begin(): starting a box may change the page above
+    const w = begin();
+    if (!w) return;
     e.preventDefault();
     c.setPointerCapture(e.pointerId);
-    const p = toCanvas(c, e);
-    drag = { canvas: c, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    drag = { canvas: c, w, auto: !wasMode, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
   });
   c.addEventListener('pointermove', e => {
     if (!drag || drag.canvas !== c) return;
     const p = toCanvas(c, e); drag.x1 = p.x; drag.y1 = p.y;
     redraw();
   });
-  c.addEventListener('pointerup', () => {
+  const end = () => {
     if (!drag || drag.canvas !== c) return;
-    const r = normRect(drag), w = active(); drag = null;
-    if (w) done(w, r);
-  });
+    const r = normRect(drag), d = drag; drag = null;
+    if (r.w < 4 && r.h < 4) { if (d.auto) cancelMode(); else redraw(); return; } // just a click
+    done(d.w, r);
+  };
+  c.addEventListener('pointerup', end);
+  c.addEventListener('pointercancel', () => { if (drag && drag.canvas === c) { const d = drag; drag = null; if (d.auto) cancelMode(); } });
 }
 function takeSnapshot() {
   const f = frameSize();
   snap.width = f.w; snap.height = f.h;
   sctx.drawImage(source.el, 0, 0);
 }
-function beginMode(w, step) {
-  if (!source) return;
+function beginMode(w, step, scroll = true) {
+  if (!source) { hint('Share your game window first (or load a screenshot), then you can box.', true); return false; }
   if (step === 'icon' && !w.area) step = 'area';
+  if (step === 'area') areaFor = w;
   takeSnapshot();
   mode = { w, step };
-  if (step === 'icon') { drawZoomFrozen(w); w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-  else $('mainView').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (step === 'icon') { drawZoomFrozen(w); if (scroll) w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else if (scroll) $('mainView').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  refreshUI();
+  return true;
+}
+let areaFor = null; // which watcher a drag on the game screen boxes the area for
+function beginAreaDrag() {
+  if (!source) return null;
+  if (mode && mode.step === 'area') return mode.w;
+  const w = areaFor || W[0];
+  return beginMode(w, 'area', false) ? w : null;
+}
+function beginIconDrag(w) {
+  if (!source || !w.area) return null;
+  if (mode && mode.step === 'icon' && mode.w === w) return w;
+  return beginMode(w, 'icon', false) ? w : null;
+}
+function cancelMode() {
+  const w = mode && mode.w; mode = null; drag = null;
+  if (w && w.lastArea) drawZoom(w);
   refreshUI();
 }
-function cancelMode() { mode = null; drag = null; refreshUI(); }
 function finishArea(w, r) {
   if (r.w < 12 || r.h < 12) { hint('That box is too small. Drag around <b>all</b> of your buff icons.', true); return; }
-  w.area = r; w.savedFrame = frameSize(); w.calibInfo = null;
+  const f = frameSize(), sameSize = w.savedFrame && w.savedFrame.w === f.w && w.savedFrame.h === f.h;
+  w.area = r; w.savedFrame = f;
   resetRuntime(w);
-  setTemplate(w, null, null, false);
-  save();
   log(w.name + ': buff area set (' + r.w + '×' + r.h + ').');
+  if (w.tpl && sameSize && r.w >= w.tpl.width && r.h >= w.tpl.height) {
+    // Keep the icon already boxed; just re-measure in the new area.
+    save();
+    mode = null;
+    startCalibration(w);
+    tick();
+    return;
+  }
+  setTemplate(w, null, null, false); w.calibInfo = null;
+  save();
   mode = { w, step: 'icon' };
   drawZoomFrozen(w);
   w.el.sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
   refreshUI();
 }
 function finishIcon(w, r) {
-  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the icon in the zoomed view.', true); return; }
+  if (r.w < 6 || r.h < 6) { hint('That box is too small. Drag a box around the icon in the zoomed view.', true); drawZoomFrozen(w); return; }
   const f = frameSize(), a = clampRect(w.area, f);
   const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, f);
   w.tplRect = abs;
@@ -992,7 +1036,7 @@ function buildWatcher(w) {
     vGrace: q('.vGrace'), vThr: q('.vThr'), vIgn: q('.vIgn'), vDig: q('.vDig'),
   };
   const E = w.el;
-  attachDrag(zoom, () => mode && mode.step === 'icon' && mode.w === w ? w : null, finishIcon, () => drawZoomFrozen(w));
+  attachDrag(zoom, () => beginIconDrag(w), finishIcon, () => drawZoomFrozen(w));
   E.bArea.addEventListener('click', () => beginMode(w, 'area'));
   E.bIcon.addEventListener('click', () => beginMode(w, 'icon'));
   E.bRecal.addEventListener('click', () => startCalibration(w));
@@ -1027,17 +1071,26 @@ function refreshUI() {
   $('emptyMain').hidden = has; mainCanvas.hidden = !has;
   $('btnShare').hidden = has && source.kind === 'video';
   $('btnStop').hidden = !(has && source.kind === 'video');
-  $('btnCancel').hidden = !mode;
+  $('btnCancel').classList.toggle('invisible', !mode); $('btnCancel').disabled = !mode;
   const mv = $('mainView');
   mv.classList.toggle('selecting', !!(mode && mode.step === 'area'));
+  mv.classList.toggle('drawable', has);
   mv.style.setProperty('--wc', mode ? mode.w.color : '');
   for (const w of W) {
     const E = w.el;
     E.title.textContent = w.name;
     E.rule.textContent = ruleText(w);
     E.sec.style.opacity = w.enabled ? '' : '0.7';
-    E.bArea.disabled = !has;
-    E.bIcon.disabled = !has || !w.area;
+    E.bArea.textContent = w.area ? 'Redo buff area' : 'Box buff area';
+    E.bIcon.textContent = w.tpl ? 'Redo icon box' : 'Box icon';
+    E.bIcon.disabled = !w.area && !has;
+    E.zoomView.classList.toggle('drawable', has && !!w.area);
+    E.zEmpty.textContent = w.area && !has ? 'Share your game window to see this area. Then drag here to redo the icon box.'
+      : 'Box a buff area that includes this icon. It shows up here, enlarged, so you can box the icon precisely.';
+    if (E.chip) {
+      E.chip.textContent = w.name;
+      E.chip.setAttribute('aria-pressed', String((mode && mode.step === 'area' ? mode.w : (areaFor || W[0])) === w));
+    }
     E.bArea.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'area'));
     E.bIcon.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'icon'));
     E.zoomView.classList.toggle('selecting', !!(mode && mode.w === w && mode.step === 'icon'));
@@ -1054,7 +1107,7 @@ function refreshUI() {
   else if (mode && mode.step === 'icon') hint(mode.w.kind === 'presence'
     ? 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon. The buff must be on right now.'
     : 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon, <b>number included</b>. It must show <b>' + escapeHTML(mode.w.target) + '</b> right now.');
-  else if (W.some(ready)) hint('<b>Watching.</b> Leave this window open. You can put the game in front of it.');
+  else if (W.some(ready)) hint('<b>Watching.</b> Leave this window open. To redo a box, drag on the game screen (area) or in a zoomed view (icon).');
   else hint('Set up a buff below: click <b>Box buff area</b> in its section.');
   $('btnFrozenSilence').hidden = !(frozen && !frozenSilenced);
   refreshStatus();
@@ -1124,7 +1177,18 @@ function bindSettings() {
 }
 
 W.forEach(buildWatcher);
-attachDrag(mainCanvas, () => mode && mode.step === 'area' ? mode.w : null, finishArea, drawMain);
+attachDrag(mainCanvas, beginAreaDrag, finishArea, drawMain);
+W.forEach(w => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip'; b.style.setProperty('--wc', w.color);
+  b.addEventListener('click', () => {
+    areaFor = w;
+    if (mode && mode.step === 'area' && mode.w !== w) { mode.w = w; }
+    refreshUI();
+  });
+  w.el.chip = b;
+  $('areaFor').append(b);
+});
 $('btnShare').addEventListener('click', startShare);
 $('btnStop').addEventListener('click', () => { stopSource(); log('Screen sharing stopped.'); refreshUI(); });
 $('fileShot').addEventListener('change', e => { useScreenshot(e.target.files[0]); e.target.value = ''; });

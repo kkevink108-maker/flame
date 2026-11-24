@@ -20,6 +20,10 @@ Each can be turned off with its **Watch** checkbox and renamed.
    - Stack counter: while it shows the number you want to be warned about, number included.
 5. Leave the page open in its own browser window. It keeps checking while it's behind the game.
 
+**Redo a box any time:** drag on the game screen to redo an area (the chips above the screen
+pick which buff it's for), or drag in a buff's zoomed view to redo its icon box. Redoing only the
+area keeps the icon and just re-measures. The **Redo…** buttons in each section do the same.
+
 While you set up one watcher, the others keep watching. The setup is saved in the browser, so
 next time you only click Share. **Try a screenshot** tests a setup on a saved screenshot.
 
