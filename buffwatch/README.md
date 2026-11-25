@@ -5,8 +5,10 @@ when one needs you. It has two watchers, each in its own section with its own st
 alarm sound:
 
 - **Aurelia's Elixir** (or any buff): alarms when the icon disappears.
-- **Stack counter** (e.g. the dice buff): alarms when the icon's number reaches the number you
-  choose (default 2). Box it at any number, e.g. while it's 1.
+- **Stack counter** (the dice buff): alarms when the icon's number reaches the number you choose
+  (default 2). The dice icon is built in, so only its buff area needs a box, and that can be drawn
+  before the buff has ever shown up. Untick **Use the built-in dice icon** to box a different icon
+  yourself (at any number, e.g. while it's 1).
 
 Each can be turned off with its **Watch** checkbox and renamed.
 
@@ -17,8 +19,8 @@ Each can be turned off with its **Watch** checkbox and renamed.
 3. In a watcher's section click **Box buff area**, then drag around the buff icon block on the game screen.
 4. In that section's zoomed view, drag a tight box around the icon.
    - Elixir: while the buff is on.
-   - Stack counter: while it shows any number (e.g. 1), number included. Type the number to alarm
-     at under its icon.
+   - Stack counter: nothing to box with the built-in dice icon. With your own icon: box it while
+     it shows any number (e.g. 1), number included. Type the number to alarm at under its icon.
 5. Leave the page open in its own browser window. It keeps checking while it's behind the game.
 
 **Redo a box any time:** drag on the game screen to redo an area (the chips above the screen
@@ -45,8 +47,10 @@ cutoff is set halfway between the two. Use **Recalibrate** any time the icon is 
   (another icon slid in) for three checks in a row;
 - after 1.5 s (adjustable) when something moving, like damage numbers, covers it.
 
-**Stack counter:** the icon is found by the part above its number. The boxed number only tells it
-where the number sits. The live number is compared with the alarm number drawn in the game's own
+**Stack counter:** the icon is found by the part above its number. The built-in dice icon is cut
+from a screenshot with only the dice's own pixels kept (map background and the number corner are
+transparent), and a fixed cutoff of 75% (Recalibrate while it's on screen to measure one). With your
+own icon, the boxed number only tells it where the number sits. The live number is compared with the alarm number drawn in the game's own
 5×7 digit font (built in, taken from screenshots), right-aligned at that spot (best overlap within
 ±3 px; 80% needed). Only
 digit-shaped strokes count: bright, 1 px thin, outlined by darker pixels and sitting on the number's

@@ -222,7 +222,7 @@ let paused = false; // Pause button: no checks, no alarms
 // presence: alarm when the icon disappears.  count: alarm when the icon's number shows the boxed value.
 function makeWatcher(o) {
   return Object.assign({
-    enabled: true, name: '', target: '2',
+    enabled: true, name: '', target: '2', builtin: false, customTpl: null,
     threshold: 0.70, ignoreBottom: 0.30, graceMs: 1500, digitNeed: 0.80,
     area: null, tplRect: null, tpl: null, tplURL: null, savedFrame: null, calibInfo: null,
     prepared: null, digit: null,
@@ -233,11 +233,33 @@ function makeWatcher(o) {
 }
 const W = [
   makeWatcher({ id: 'elixir', kind: 'presence', color: '#f2c14e', name: "Aurelia's Elixir" }),
-  makeWatcher({ id: 'stack', kind: 'count', color: '#3fd6d0', name: 'Dice buff' }),
+  makeWatcher({ id: 'stack', kind: 'count', color: '#3fd6d0', name: 'Dice buff', builtin: true, threshold: 0.75 }),
 ];
-const PERSIST = ['enabled', 'name', 'target', 'threshold', 'ignoreBottom', 'graceMs', 'digitNeed', 'area', 'tplRect', 'tplURL', 'savedFrame', 'calibInfo'];
+const PERSIST = ['enabled', 'builtin', 'calibBuiltin', 'name', 'target', 'threshold', 'ignoreBottom', 'graceMs', 'digitNeed', 'area', 'tplRect', 'tplURL', 'savedFrame', 'calibInfo'];
 const ruleText = w => w.kind === 'presence' ? 'Alarm when it disappears' : 'Alarm when it shows ' + (w.target || '?');
 const spoken = w => w.kind === 'presence' ? w.name + ' is gone' : w.name + ' at ' + (w.target || 'target');
+
+// Built-in dice icon, cut from a screenshot: only the dice's own pixels (map background and the
+// number corner are transparent), plus where its stack number sits. Lets the dice watcher run with
+// just a buff-area box, before the buff has ever shown up.
+const DICE = { png: 'data:image/png;base64,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', numPos: { right: 29, base: 28 }, threshold: 0.75 };
+let diceImg = null;
+function loadBuiltin(done) {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+    diceImg = x.getImageData(0, 0, img.width, img.height);
+    done();
+  };
+  img.src = DICE.png;
+}
+// The icon a watcher looks for: the built-in one or the one you boxed.
+function useTemplate(w) {
+  w.tpl = w.builtin ? diceImg : w.customTpl;
+  prepare(w);
+  drawRef(w);
+}
 
 /* ---------------- source & canvases ---------------- */
 let source = null;      // {kind:'video'|'image', el, w(), h(), track}
@@ -280,6 +302,7 @@ function load() {
     const s = d.ws && d.ws[w.id]; if (!s) return;
     PERSIST.forEach(k => { if (s[k] != null) w[k] = s[k]; });
     if (w.digitNeed === 0.7) w.digitNeed = 0.8; // old default; the built-in digit shapes match exactly
+    if (w.builtin && !w.calibBuiltin) { w.threshold = DICE.threshold; w.calibInfo = null; } // cutoff measured on a different icon
     if (w.tplURL) {
       const url = w.tplURL, img = new Image();
       img.onload = () => {
@@ -439,7 +462,7 @@ function onSourceReady() {
     resetRuntime(w);
     if (w.savedFrame && w.area && (w.savedFrame.w !== f.w || w.savedFrame.h !== f.h)) {
       log(w.name + ': game picture size changed (' + w.savedFrame.w + '×' + w.savedFrame.h + ' → ' + f.w + '×' + f.h + '). Redo its boxes.', 'bad');
-      w.area = null; w.calibInfo = null; setTemplate(w, null);
+      w.area = null; w.calibInfo = null; if (!w.builtin) setTemplate(w, null);
     }
   });
   frozen = false; frozenSince = null; prevSig = null;
@@ -447,18 +470,17 @@ function onSourceReady() {
   refreshUI();
   const first = W.find(w => w.enabled && !w.area);
   if (first) areaFor = first;
-  if (first && !W.some(w => w.prepared)) beginMode(first, 'area');
+  if (first && !W.some(w => w.prepared && w.area)) beginMode(first, 'area');
 }
 
 /* ---------------- template & matching ---------------- */
 function setTemplate(w, imgData, url, persist = true) {
-  w.tpl = imgData; w.tplURL = imgData ? (url || null) : null;
-  if (w.tpl && !w.tplURL) {
-    const c = document.createElement('canvas'); c.width = w.tpl.width; c.height = w.tpl.height;
-    c.getContext('2d').putImageData(w.tpl, 0, 0); w.tplURL = c.toDataURL('image/png');
+  w.customTpl = imgData; w.tplURL = imgData ? (url || null) : null;
+  if (imgData && !w.tplURL) {
+    const c = document.createElement('canvas'); c.width = imgData.width; c.height = imgData.height;
+    c.getContext('2d').putImageData(imgData, 0, 0); w.tplURL = c.toDataURL('image/png');
   }
-  prepare(w);
-  drawRef(w);
+  useTemplate(w);
   if (persist) save();
 }
 // Stack numbers are light grey/white strokes with a dark outline. "Bright" is judged by brightness
@@ -585,7 +607,11 @@ function prepare(w) {
   const tpl = w.tpl;
   if (!tpl) return;
   let th;
-  if (w.kind === 'count') {
+  if (w.kind === 'count' && w.builtin) {
+    w.numPos = DICE.numPos;
+    w.digit = buildTarget(w.numPos, w.target);
+    th = tpl.height; // the number corner is already cut out of the built-in icon
+  } else if (w.kind === 'count') {
     w.numPos = findNumberPos(tpl);
     w.digit = buildTarget(w.numPos, w.target);
     th = w.numPos ? Math.max(4, w.numPos.base - 7) : Math.round(tpl.height * 0.7); // find the icon by the part above the number
@@ -595,6 +621,7 @@ function prepare(w) {
   const pts = [];
   for (let y = 0; y < th; y += step) for (let x = 0; x < tw; x += step) {
     const i = (y * tw + x) * 4;
+    if (tpl.data[i + 3] < 128) continue; // cut-away pixel (built-in icon)
     const cell = Math.min(GX - 1, Math.floor(x * GX / tw)) + GX * Math.min(GY - 1, Math.floor(y * GY / th));
     pts.push([x, y, tpl.data[i], tpl.data[i + 1], tpl.data[i + 2], cell]);
   }
@@ -608,7 +635,9 @@ function prepare(w) {
   pts.forEach((p, k) => s.set(p, k * 6));
   const cellN = new Int32Array(GX * GY);
   pts.forEach(p => cellN[p[5]]++);
-  w.prepared = { s, n: pts.length, tw, th, fullH: tpl.height, cellN };
+  // Only squares with enough pixels count; the best two thirds of them make the score.
+  const used = Array.from(cellN).filter(v => v >= 6).length;
+  w.prepared = { s, n: pts.length, tw, th, fullH: tpl.height, cellN, keep: Math.max(1, Math.round(used * KEEP / (GX * GY))) };
 }
 // Occlusion-tolerant score at one spot (see GX/GY/KEEP).
 function robust(img, P, tol, x, y) {
@@ -620,9 +649,12 @@ function robust(img, P, tol, x, y) {
     const a = d[i] - s[k + 2], b = d[i + 1] - s[k + 3], c = d[i + 2] - s[k + 4];
     if ((a < 0 ? -a : a) + (b < 0 ? -b : b) + (c < 0 ? -c : c) <= tol) hits[s[k + 5]]++;
   }
-  const f = Array.from(hits, (v, j) => cellN[j] ? v / cellN[j] : 0).sort((p, q) => q - p);
-  let sum = 0; for (let j = 0; j < KEEP; j++) sum += f[j];
-  return sum / KEEP;
+  const f = [];
+  for (let j = 0; j < hits.length; j++) if (cellN[j] >= 6) f.push(hits[j] / cellN[j]);
+  f.sort((p, q) => q - p);
+  const keep = Math.min(P.keep, f.length);
+  let sum = 0; for (let j = 0; j < keep; j++) sum += f[j];
+  return keep ? sum / keep : 0;
 }
 // Where is it, and how well does it match? Checks the best spot found by the search and the
 // spot it was last seen at (it may be partly covered there, which the search alone can miss).
@@ -834,7 +866,7 @@ function finishCalibration(w) {
   }
   // Halfway between "icon there" and the best look-alike: room for the mouse covering part of the icon.
   w.threshold = Math.round(Math.max(0.3, Math.min(0.9, look + (on - look) * 0.5)) * 100) / 100;
-  w.calibInfo = { on, look };
+  w.calibInfo = { on, look }; w.calibBuiltin = !!w.builtin;
   log(w.name + ': calibrated. Icon ' + pct(on) + ', look-alikes ' + pct(look) + ' → found above ' + pct(w.threshold) + '.', 'ok');
   w.lastSeen = Date.now(); w.missStreak = 0; w.missSince = null;
   if (atTarget) { // it shows the number right now: stay quiet until it changes, then alarm the next time
@@ -1026,6 +1058,12 @@ function finishArea(w, r) {
   w.area = r; w.savedFrame = f;
   resetRuntime(w);
   log(w.name + ': buff area set (' + r.w + '×' + r.h + ').');
+  if (w.builtin && w.tpl) {
+    save(); mode = null;
+    log(w.name + ': watching for the dice to show up (built-in icon, no icon box needed).');
+    refreshUI(); tick();
+    return;
+  }
   if (w.tpl && sameSize && r.w >= w.tpl.width && r.h >= w.tpl.height) {
     // Keep the icon already boxed; just re-measure in the new area.
     save();
@@ -1034,7 +1072,8 @@ function finishArea(w, r) {
     tick();
     return;
   }
-  setTemplate(w, null, null, false); w.calibInfo = null;
+  if (!w.builtin) setTemplate(w, null, null, false);
+  w.calibInfo = null;
   save();
   mode = { w, step: 'icon' };
   drawZoomLive(w);
@@ -1046,6 +1085,7 @@ function finishIcon(w, r) {
   const f = frameSize(), a = clampRect(w.area, f);
   const abs = clampRect({ x: a.x + r.x, y: a.y + r.y, w: r.w, h: r.h }, f);
   w.tplRect = abs;
+  w.builtin = false; // you boxed your own icon
   setTemplate(w, readRegion(snap, abs));
   if (w.kind === 'count' && !w.numPos) {
     log(w.name + ': no number found in that box. Box the icon, number included, while it shows a number.', 'bad');
@@ -1111,7 +1151,8 @@ function buildWatcher(w) {
       <canvas class="refc" width="1" height="1"></canvas>
       <div class="fields">
         <div class="field"><label for="${id('name')}">Name</label><input type="text" id="${id('name')}" maxlength="40"></div>
-        ${presence ? '' : `<div class="field"><label for="${id('target')}">Alarm when it shows</label><input type="text" id="${id('target')}" maxlength="3" inputmode="numeric"><small>Box the icon at any number (for example while it's 1); it alarms when it shows this one.</small></div>`}
+        ${presence ? '' : `<label class="check"><input type="checkbox" id="${id('builtin')}"> Use the built-in dice icon (only the buff area needs a box)</label>`}
+        ${presence ? '' : `<div class="field"><label for="${id('target')}">Alarm when it shows</label><input type="text" id="${id('target')}" maxlength="3" inputmode="numeric"><small>It alarms when the number on the icon shows this.</small></div>`}
       </div>
     </div>
     <p class="note"></p>
@@ -1148,7 +1189,7 @@ function buildWatcher(w) {
     meter: q('.meter'), fill: q('.meter i'), mark: q('.meter u'), score: q('.kScore'), digit: q('.kDigit'),
     seen: q('.kSeen'), ms: q('.kMs'), note: q('.note'), dRef: q('.dRef'), dLive: q('.dLive'),
     bArea: q('.bArea'), bIcon: q('.bIcon'), bRecal: q('.bRecal'), bSilence: q('.bSilence'), bTest: q('.bTest'),
-    on: $(id('on')), name: $(id('name')), target: $(id('target')), grace: $(id('grace')), thr: $(id('thr')), ign: $(id('ign')), dig: $(id('dig')),
+    on: $(id('on')), name: $(id('name')), target: $(id('target')), builtin: $(id('builtin')), grace: $(id('grace')), thr: $(id('thr')), ign: $(id('ign')), dig: $(id('dig')),
     vGrace: q('.vGrace'), vThr: q('.vThr'), vIgn: q('.vIgn'), vDig: q('.vDig'),
   };
   const E = w.el;
@@ -1165,6 +1206,15 @@ function buildWatcher(w) {
     save(); refreshUI();
   });
   E.name.addEventListener('input', () => { w.name = E.name.value.trim() || 'Buff'; save(); refreshUI(); });
+  if (E.builtin) E.builtin.addEventListener('change', () => {
+    w.builtin = E.builtin.checked;
+    resetRuntime(w); w.calibInfo = null;
+    w.threshold = w.builtin ? DICE.threshold : 0.70;
+    useTemplate(w);
+    log(w.name + (w.builtin ? ': using the built-in dice icon.' : ': using the icon you boxed.'));
+    if (!w.builtin && !w.customTpl && w.area && source) beginMode(w, 'icon');
+    save(); refreshUI();
+  });
   if (E.target) E.target.addEventListener('input', () => {
     w.target = E.target.value.trim();
     w.digit = buildTarget(w.numPos, w.target);
@@ -1181,6 +1231,7 @@ function syncFields(w) {
   E.on.checked = w.enabled;
   if (document.activeElement !== E.name) E.name.value = w.name;
   if (E.target && document.activeElement !== E.target) E.target.value = w.target;
+  if (E.builtin) E.builtin.checked = w.builtin;
   if (E.grace) { E.grace.value = w.graceMs; E.vGrace.textContent = (w.graceMs / 1000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '') + ' s'; }
   E.thr.value = Math.round(w.threshold * 100); E.vThr.textContent = pct(w.threshold);
   if (E.ign) { E.ign.value = Math.round(w.ignoreBottom * 100); E.vIgn.textContent = pct(w.ignoreBottom); }
@@ -1203,7 +1254,7 @@ function refreshUI() {
     E.rule.textContent = ruleText(w);
     E.sec.style.opacity = w.enabled ? '' : '0.7';
     E.bArea.textContent = w.area ? 'Redo buff area' : 'Box buff area';
-    E.bIcon.textContent = w.tpl ? 'Redo icon box' : 'Box icon';
+    E.bIcon.textContent = w.builtin ? 'Box my own icon' : w.customTpl ? 'Redo icon box' : 'Box icon';
     E.bIcon.disabled = !w.area && !has;
     E.zoomView.classList.toggle('drawable', has && !!w.area);
     E.zEmpty.textContent = w.area && !has ? 'Share your game window to see this area. Then drag here to redo the icon box.'
@@ -1222,7 +1273,7 @@ function refreshUI() {
   }
   if (paused) hint('<b>Paused.</b> Nothing is checked and no alarm will sound. Click <b>Resume</b> when you\'re back.', true);
   else if (frozen && !frozenSilenced) hint('<b>Game picture froze.</b> The picture stopped changing for 20 s, so the buffs can\'t be checked. Is MapleStory minimized?', true);
-  else if (!has) hint(W.some(w => w.prepared)
+  else if (!has) hint(W.some(w => w.prepared && w.area)
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
     : 'Click <b>Share game window</b> and choose the MapleStory window.');
   else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block. The picture pauses while you drag.');
@@ -1248,10 +1299,10 @@ function refreshStatus() {
       st.classList.add('pending'); big = 'WHICH NUMBER?'; small = 'Type the number to alarm at (for example 2) under the icon below.';
     }
     else if (!ready(w) || !source || editing) {
-      big = editing ? 'SETTING UP' : (!source && w.prepared ? 'READY' : 'NOT SET UP');
+      big = editing ? 'SETTING UP' : (!source && w.prepared && w.area ? 'READY' : 'NOT SET UP');
       small = editing ? 'Follow the instructions above the game screen.'
-        : !source ? (w.prepared ? 'Share your game window to start.' : 'Share your game window, then box the area and icon.')
-        : 'Box the buff area and the icon.';
+        : !source ? (w.prepared && w.area ? 'Share your game window to start.' : w.builtin ? 'Share your game window, then box the buff area.' : 'Share your game window, then box the area and icon.')
+        : w.builtin ? 'Box the buff area (top right of the game). The buff doesn\'t need to be showing.' : 'Box the buff area and the icon.';
     } else if (w.calib) {
       st.classList.add('pending'); big = 'CALIBRATING';
       small = 'Measuring the icon (' + w.calib.present.length + ' of ' + CALIB_CHECKS + '). Keep it on screen.';
@@ -1262,7 +1313,7 @@ function refreshStatus() {
       else { st.classList.add('ok'); big = 'BUFF ON'; small = w.name + ' is active.'; }
     } else {
       if (w.alarmOn) { st.classList.add(w.silenced ? 'quiet' : 'bad'); big = 'AT ' + w.target; small = w.silenced ? 'Quiet until the number changes. The next time it reaches ' + w.target + ' it will alarm.' : w.name + ' is at ' + w.target + '!'; }
-      else if (!L.present) { st.classList.add('pending'); big = 'NOT FOUND'; small = "Can't see the icon right now (buff off or covered)."; }
+      else if (!L.present) { st.classList.add('pending'); big = 'NOT FOUND'; small = w.builtin ? 'Waiting for the dice to show up.' : "Can't see the icon right now (buff off or covered)."; }
       else { st.classList.add('ok'); big = 'NOT ' + w.target; small = 'Waiting for ' + w.name + ' to reach ' + w.target + '.'; }
     }
     E.big.textContent = big; E.small.textContent = small;
@@ -1277,7 +1328,9 @@ function refreshStatus() {
     E.seen.textContent = w.lastSeen ? new Date(w.lastSeen).toLocaleTimeString() : '–';
     E.bSilence.disabled = !w.alarmOn || w.silenced;
     E.bRecal.disabled = !ready(w) || !source || !!w.calib || !!editing;
-    E.note.textContent = w.calibInfo
+    E.note.textContent = w.builtin
+      ? 'Built-in dice icon: just box the buff area, even before the buff shows up. The framed spot is where it reads the number.' + (w.calibInfo ? ' Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' : '')
+      : w.calibInfo
       ? 'Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' + (w.kind === 'count' && w.numPos ? ' The framed spot is where it reads the number.' : '')
       : w.kind === 'presence'
         ? 'Box the icon while the buff is on. It then measures itself for 2 s.'
@@ -1348,6 +1401,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && mode) canc
 load();
 bindSettings();
 refreshUI();
+loadBuiltin(() => { W.forEach(w => { if (w.builtin) useTemplate(w); }); refreshUI(); });
 requestAnimationFrame(loop);
 let lastFrozenUI = false;
 setInterval(() => { if (frozen !== lastFrozenUI) { lastFrozenUI = frozen; refreshUI(); } }, 500);
