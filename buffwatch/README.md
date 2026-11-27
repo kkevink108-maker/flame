@@ -10,7 +10,11 @@ alarm sound:
   before the buff has ever shown up. Untick **Use the built-in dice icon** to box a different icon
   yourself (at any number, e.g. while it's 1).
 
-Each can be turned off with its **Watch** checkbox and renamed.
+- **Loot timer**: reads the map's *Time Left* box and plays a ka-ching every 1:50 (counted down
+  from the 30:00 start: 28:10, 26:20 … 0:40), plus a warning sound and voice at 0:30.
+
+Each can be turned off with its **Watch** checkbox, muted with its own **Mute** button, and the
+buffs can be renamed. **Mute all** silences everything.
 
 ## Use
 
@@ -33,6 +37,10 @@ at the moment you start dragging.
 While you set up one watcher, the others keep watching. The setup is saved in the browser, so
 next time you only click Share. Firefox keeps that saved setup per file name: save new versions over
 the old `buff-watch.html` (not as `buff-watch(6).html`) to keep it. **Try a screenshot** tests a setup on a saved screenshot.
+
+**Mini view**: a compact panel for a small window beside the game (loot timer, a row per buff,
+Pause, Mute all, Share/Stop). It switches on by itself when the window is narrower than 600 px;
+**Expand** / **Mini view** switch by hand. The game preview isn't drawn while it's up.
 
 ## How it detects
 
@@ -62,6 +70,14 @@ alarm stops once a different number shows, or the icon is gone for 3 s.
 
 If the game picture stops changing for 20 s (e.g. the game was minimized) it also alarms, because
 it can no longer see the buffs. That alarm can be turned off under **Alarm**.
+
+**Loot timer:** box the *Time Left* box once. Its digits are seven-segment bars, so each digit is
+read by checking which bars are lit (it ignores the box border, the "min"/"sec" text and things
+showing through the box, and rejects a reading where a digit is missing). Once two readings agree
+it counts down by the clock, and re-reads the box every 10 s: small drift is corrected, a jump up
+means a new run (you re-entered the map), and if the timer can't be seen for 25 s the dings stop.
+Missed ka-chings are never played in a burst. The interval (1:50), warning (0:30) and run length
+(30:00) can be changed in its section.
 
 **CPU use** (under **Alarm**): *Balanced* (default) checks twice a second and jumps to four times a
 second the moment an icon looks off, so alarms stay quick; *Saver* checks once a second when calm;

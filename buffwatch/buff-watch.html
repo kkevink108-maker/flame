@@ -45,6 +45,7 @@ header .sub{color:var(--muted);flex:1 1 260px;min-width:0}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:600}
 .btn.small{padding:5px 10px;font-size:13px}
+#btnMuteAll[aria-pressed="true"]{background:var(--panel);border-color:var(--bad);color:var(--bad)}
 #btnPause[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#2a1a00;font-weight:600}
 .status.paused{border-color:var(--warn);opacity:.8} .status.paused .big{color:var(--warn)}
 .card h2 .btn.small{margin-block:-6px}
@@ -133,6 +134,48 @@ details .inner{display:flex;flex-direction:column;gap:10px}
 .log .pic{display:block;max-width:100%;margin-top:4px;border-radius:4px;image-rendering:pixelated}
 .log .bad{color:var(--bad)} .log .ok{color:var(--ok)}
 .tips{color:var(--muted);font-size:13px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+
+/* ---------- mini view: for a small window beside the game ---------- */
+body.mini .wrap{display:none}
+#mini{max-width:480px;margin:0 auto;padding-block:16px 20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));flex-direction:column;gap:12px}
+body.mini #mini{display:flex}
+.mhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mtitle{font:700 20px/1 var(--display);display:flex;align-items:center;gap:8px}
+.mtitle .gem{width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,#bff3ff 0%,#6fd3e8 45%,var(--gold) 100%)}
+.mstat{display:flex;align-items:center;gap:8px;font:600 12px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mstat i{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.mstat b{font:700 15px var(--display);letter-spacing:.06em}
+.mstat.on i{background:var(--ok);box-shadow:0 0 8px var(--ok)} .mstat.on b{color:var(--ok)}
+.mstat.warn i{background:var(--warn)} .mstat.warn b{color:var(--warn)}
+.mstat.bad i{background:var(--bad)} .mstat.bad b{color:var(--bad)}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.mloot{border-top:3px solid #a78bfa;text-align:center;display:flex;flex-direction:column;gap:2px}
+.mloot.ending{border-color:var(--bad)}
+.mrow{display:flex;align-items:center;gap:8px}
+.mlabel{font:700 12px var(--display);letter-spacing:.12em;text-transform:uppercase;color:#a78bfa;flex:1;text-align:left}
+.mchip{font-size:11px;color:var(--muted);background:var(--panel-2);border-radius:999px;padding:2px 9px}
+.mtog{border:1px solid var(--ok);color:var(--ok);background:transparent;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.mtog.muted{border-color:var(--line);color:var(--muted)}
+.mtog.silence{border-color:var(--bad);background:var(--bad);color:#fff}
+.mbig{font:700 46px/1.1 var(--display);color:var(--ok);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.mloot.ending .mbig{color:var(--bad)} .mloot.idle .mbig{color:var(--muted)}
+.msub{color:var(--muted);font-size:13px}
+#mRows{display:flex;flex-direction:column;gap:8px}
+.mw{display:flex;align-items:center;gap:10px}
+.mw .dot{width:10px;height:10px;border-radius:3px;background:var(--wc);flex:none}
+.mw .mname{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere}
+.mw .mstate{font:700 13px var(--display);letter-spacing:.04em;color:var(--muted);text-align:right}
+.mw.ok .mstate{color:var(--ok)} .mw.pending .mstate,.mw.quiet .mstate,.mw.paused .mstate{color:var(--warn)}
+.mw.bad{border-color:var(--bad);background:#3a0f18} .mw.bad .mstate{color:#fff}
+.mbtns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mbtn{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:12px;font-weight:600}
+.mbtn svg{width:20px;height:20px;fill:currentColor}
+.mbtn[aria-pressed="true"]{border-color:var(--warn);color:var(--warn)}
+.mbtn:focus-visible,.mtog:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.mshare{width:100%;padding:12px}
+.mfoot{margin:0;text-align:center;color:var(--muted);font-size:12px}
+.fields3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:520px){.fields3{grid-template-columns:minmax(0,1fr)}}
 </style>
 </head>
 <body>
@@ -143,6 +186,8 @@ details .inner{display:flex;flex-direction:column;gap:10px}
     <div class="btns">
       <button class="btn primary" id="btnShare">Share game window</button>
       <button class="btn" id="btnPause" aria-pressed="false">Pause</button>
+      <button class="btn" id="btnMuteAll" aria-pressed="false">Mute all</button>
+      <button class="btn" id="btnMini" title="Compact view for a small window">Mini view</button>
       <button class="btn" id="btnStop" hidden>Stop sharing</button>
       <label class="btn" id="lblShot" title="Load a screenshot to try the setup without sharing">Try a screenshot<input type="file" id="fileShot" accept="image/*"></label>
     </div>
@@ -211,6 +256,27 @@ details .inner{display:flex;flex-direction:column;gap:10px}
   <div class="watchers" id="watchers"></div>
 </div>
 
+<div id="mini" hidden>
+  <div class="mhead">
+    <div class="mtitle"><span class="gem" aria-hidden="true"></span>Buff Watch</div>
+    <button class="btn small" id="mFull">Expand</button>
+  </div>
+  <div class="mstat"><i id="mDot" aria-hidden="true"></i><span>Status</span><b id="mState">OFF</b></div>
+  <section class="mcard mloot" id="mLoot">
+    <div class="mrow"><span class="mlabel">Loot timer</span><span class="mchip" id="mLootChip">Auto</span><button class="mtog" id="mLootMute">Unmuted</button></div>
+    <div class="mbig" id="mLootBig">–:–</div>
+    <div class="msub" id="mLootSub"></div>
+  </section>
+  <div id="mRows"></div>
+  <div class="mbtns">
+    <button class="mbtn" id="mPause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Pause</span></button>
+    <button class="mbtn" id="mMute"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.2 1.6 1.2 4.4 0 6M18.5 6.5c2.6 3 2.6 8 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Mute all</span></button>
+    <button class="mbtn" id="mExpand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Full view</span></button>
+  </div>
+  <button class="btn primary mshare" id="mShare">Share game window</button>
+  <p class="mfoot">Make the window wider to switch to the full view.</p>
+</div>
+
 <video id="video" muted playsinline hidden></video>
 
 <script>
@@ -220,14 +286,14 @@ const $ = id => document.getElementById(id);
 const STORE_KEY = 'buffwatch.v4', OLD_KEY = 'buffwatch.v3';
 
 /* ---------------- shared settings ---------------- */
-const G = { tol: 100, interval: 500, cpuV: 1, volume: 0.6, voice: true, frozenAlarm: true };
+const G = { muted: false, view: 'auto', tol: 100, interval: 500, cpuV: 1, volume: 0.6, voice: true, frozenAlarm: true };
 let paused = false; // Pause button: no checks, no alarms
 
 /* ---------------- watchers ---------------- */
 // presence: alarm when the icon disappears.  count: alarm when the icon's number shows the boxed value.
 function makeWatcher(o) {
   return Object.assign({
-    enabled: true, name: '', target: '2', builtin: false, customTpl: null,
+    enabled: true, muted: false, name: '', target: '2', builtin: false, customTpl: null,
     threshold: 0.70, ignoreBottom: 0.30, graceMs: 1500, digitNeed: 0.80,
     area: null, tplRect: null, tpl: null, tplURL: null, savedFrame: null, calibInfo: null,
     prepared: null, digit: null,
@@ -240,7 +306,15 @@ const W = [
   makeWatcher({ id: 'elixir', kind: 'presence', color: '#f2c14e', name: "Aurelia's Elixir" }),
   makeWatcher({ id: 'stack', kind: 'count', color: '#3fd6d0', name: 'Dice buff', builtin: true, threshold: 0.75 }),
 ];
-const PERSIST = ['enabled', 'builtin', 'calibBuiltin', 'name', 'target', 'threshold', 'ignoreBottom', 'graceMs', 'digitNeed', 'area', 'tplRect', 'tplURL', 'savedFrame', 'calibInfo'];
+const PERSIST = ['enabled', 'muted', 'builtin', 'calibBuiltin', 'name', 'target', 'threshold', 'ignoreBottom', 'graceMs', 'digitNeed', 'area', 'tplRect', 'tplURL', 'savedFrame', 'calibInfo'];
+// The map's "Time Left" box: ka-ching every 1:50 counted from 30:00, and a warning near the end.
+const LOOT = {
+  id: 'loot', kind: 'timer', color: '#a78bfa', name: 'Loot timer', enabled: true, muted: false,
+  area: null, savedFrame: null, every: 110, warn: 30, run: 1800,
+  lock: null, pend: null, lastRead: 0, lastOk: 0, lastCur: null, warned: false, read: null, readAt: 0, cells: null, lastArea: null, lost: false, el: {}
+};
+const LOOT_PERSIST = ['enabled', 'muted', 'area', 'savedFrame', 'every', 'warn', 'run'];
+const ALL = [...W, LOOT]; // everything that has a box on the game screen
 const ruleText = w => w.kind === 'presence' ? 'Alarm when it disappears' : 'Alarm when it shows ' + (w.target || '?');
 const spoken = w => w.kind === 'presence' ? w.name + ' is gone' : w.name + ' at ' + (w.target || 'target');
 
@@ -286,6 +360,7 @@ function save() {
   try {
     const ws = {};
     W.forEach(w => { ws[w.id] = {}; PERSIST.forEach(k => ws[w.id][k] = w[k]); });
+    ws.loot = {}; LOOT_PERSIST.forEach(k => ws.loot[k] = LOOT[k]);
     localStorage.setItem(STORE_KEY, JSON.stringify({ G, ws }));
   } catch (e) {}
 }
@@ -303,6 +378,8 @@ function load() {
   }
   if (!d) return;
   for (const k in G) if (d.G && d.G[k] != null) G[k] = d.G[k];
+  G.view = 'auto';
+  if (d.ws && d.ws.loot) LOOT_PERSIST.forEach(k => { if (d.ws.loot[k] != null) LOOT[k] = d.ws.loot[k]; });
   if (!(d.G && d.G.cpuV)) { if (G.interval === 250) G.interval = 500; G.cpuV = 1; } // older versions: switch to Balanced
   W.forEach(w => {
     const s = d.ws && d.ws[w.id]; if (!s) return;
@@ -360,6 +437,31 @@ function say(text) {
     u.volume = Math.min(1, G.volume + 0.2); u.rate = 1.05;
     speechSynthesis.speak(u);
   } catch (e) {}
+}
+// Ka-ching: a short metallic rattle, then two bright bell notes.
+function kaching() {
+  if (!ac) return;
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, G.volume * 0.5);
+  const len = 0.07, buf = ac.createBuffer(1, Math.floor(ac.sampleRate * len), ac.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+  const src = ac.createBufferSource(), bp = ac.createBiquadFilter(), ng = ac.createGain();
+  src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = 4200; bp.Q.value = 1.2; ng.gain.value = v * 0.9;
+  src.connect(bp).connect(ng).connect(ac.destination); src.start(t);
+  [[2093, 0.08], [2637, 0.16]].forEach(([f, d]) => {
+    [1, 2.01].forEach((m, j) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f * m;
+      g.gain.setValueAtTime(0, t + d);
+      g.gain.linearRampToValueAtTime(v * (j ? 0.25 : 0.6), t + d + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.6);
+      o.connect(g).connect(ac.destination); o.start(t + d); o.stop(t + d + 0.65);
+    });
+  });
+}
+function warnTone() { // three falling beeps
+  if (!ac) return;
+  const t = ac.currentTime + 0.02, v = Math.max(0.0001, G.volume * 0.4);
+  [988, 784, 587].forEach((f, i) => tone('triangle', f, t + i * 0.22, 0.18, v));
 }
 function chime() { // pleasant "all good again" sound
   if (!ac) return;
@@ -449,6 +551,7 @@ function useScreenshot(file) {
   };
   img.src = URL.createObjectURL(file);
 }
+function resetLoot() { Object.assign(LOOT, { lock: null, pend: null, lastRead: 0, lastOk: 0, lastCur: null, warned: false, read: null, readAt: 0, cells: null, lastArea: null, lost: false }); }
 function resetRuntime(w) {
   w.last = null; w.lastArea = null; w.anchor = null; w.calib = null; w.alarmOn = false; w.silenced = false;
   w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.prevPatch = null;
@@ -458,7 +561,7 @@ function stopSource() {
   if (source && source.track) { try { source.track.stop(); } catch (e) {} }
   if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
   source = null; stopTicker(); mode = null; drag = null;
-  W.forEach(resetRuntime);
+  W.forEach(resetRuntime); resetLoot();
   frozen = false; frozenSince = null; prevSig = null; frozenSilenced = false;
   setTitle();
 }
@@ -472,6 +575,10 @@ function onSourceReady() {
       w.area = null; w.calibInfo = null; if (!w.builtin) setTemplate(w, null);
     }
   });
+  resetLoot();
+  if (LOOT.savedFrame && LOOT.area && (LOOT.savedFrame.w !== f.w || LOOT.savedFrame.h !== f.h)) {
+    log('Loot timer: game picture size changed. Box the Time Left box again.', 'bad'); LOOT.area = null;
+  }
   frozen = false; frozenSince = null; prevSig = null;
   startTicker();
   refreshUI();
@@ -740,6 +847,161 @@ function frameChanged() {
   return changed;
 }
 
+/* ---------------- loot timer ---------------- */
+// The "Time Left" digits are seven-segment bars: each digit is read by checking which bars are lit.
+const SEG7 = { 'abcdef': 0, 'bc': 1, 'abdeg': 2, 'abcdg': 3, 'bcfg': 4, 'acdfg': 5, 'acdefg': 6, 'abc': 7, 'abcdefg': 8, 'abcdfg': 9, 'abcf': 7, 'abdfg': 9 };
+const SEG_BOX = { // where each bar sits in a digit cell, as fractions of its width and height
+  a: [0.25, 0.75, 0, 0.12], g: [0.25, 0.75, 0.44, 0.56], d: [0.25, 0.75, 0.88, 1],
+  f: [0, 0.28, 0.18, 0.38], b: [0.72, 1, 0.18, 0.38], e: [0, 0.28, 0.62, 0.82], c: [0.72, 1, 0.62, 0.82],
+};
+function readTimer(img) {
+  const w = img.width, h = img.height, d = img.data, m = new Uint8Array(w * h);
+  for (let k = 0; k < w * h; k++) if (lum(d, k * 4) >= 140) m[k] = 1;
+  // Bright blobs (bars, text, specks), then columns of blobs that overlap left to right.
+  const seen = new Uint8Array(w * h), blobs = [];
+  for (let k = 0; k < w * h; k++) {
+    if (!m[k] || seen[k]) continue;
+    let x0 = w, x1 = -1, y0 = h, y1 = -1, n = 0; const st = [k]; seen[k] = 1;
+    while (st.length) {
+      const c = st.pop(), cx = c % w, cy = (c - cx) / w; n++;
+      if (cx < x0) x0 = cx; if (cx > x1) x1 = cx; if (cy < y0) y0 = cy; if (cy > y1) y1 = cy;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const n = ny * w + nx; if (m[n] && !seen[n]) { seen[n] = 1; st.push(n); }
+      }
+    }
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+    if (bh <= 2 || bw <= 1) continue;             // thin lines and specks (box border, things behind it); bars are thicker
+    if (bw > w * 0.4) continue;                    // something big behind the box
+    if (bw * bh > 50 && n < 0.2 * bw * bh) continue; // a sparse outline, not a solid bar
+    blobs.push({ x0, x1, y0, y1 });
+  }
+  // Group blobs that overlap left to right into columns; a column's height is its tallest run of
+  // parts stacked with small gaps (so specks far above or below don't count).
+  const group = list => {
+    const cols = [];
+    for (const b of list.slice().sort((p, q) => p.x0 - q.x0)) {
+      const c = cols[cols.length - 1];
+      if (c && b.x0 <= c.x1 + 1) { c.x1 = Math.max(c.x1, b.x1); c.parts.push(b); } else cols.push({ x0: b.x0, x1: b.x1, parts: [b] });
+    }
+    for (const c of cols) {
+      let best = null, cur = null;
+      for (const b of c.parts.slice().sort((p, q) => p.y0 - q.y0)) {
+        if (cur && b.y0 <= cur.y1 + 4) cur.y1 = Math.max(cur.y1, b.y1); else cur = { y0: b.y0, y1: b.y1 };
+        if (!best || cur.y1 - cur.y0 > best.y1 - best.y0) best = { ...cur };
+      }
+      c.y0 = best.y0; c.y1 = best.y1;
+    }
+    return cols;
+  };
+  // The digits' rows: the height most tall columns agree on (a box border is tall but stands alone).
+  const tall = group(blobs).filter(c => c.y1 - c.y0 + 1 >= 15);
+  if (!tall.length) return null;
+  const near = (a, b) => Math.abs(a.y0 - b.y0) <= 4 && Math.abs(a.y1 - b.y1) <= 4;
+  const votes = c => tall.filter(d => near(c, d)).length;
+  const best = tall.reduce((a, c) => (votes(c) > votes(a) || (votes(c) === votes(a) && c.y1 - c.y0 > a.y1 - a.y0) ? c : a));
+  const agree = tall.filter(d => near(best, d)), median = v => v.sort((p, q) => p - q)[v.length >> 1];
+  const band = { y0: median(agree.map(c => c.y0)), y1: median(agree.map(c => c.y1)) }; // typical, not the tallest (text can stick to a digit)
+  const H0 = band.y1 - band.y0 + 1, cw0 = 0.55 * H0;
+  // Keep bar-sized parts inside those rows: drops the "min"/"sec" letters and the box edges.
+  const keep = blobs.filter(b => b.y0 >= band.y0 - 3 && b.y1 <= band.y1 + 3 && !(b.y1 - b.y0 + 1 < 0.3 * H0 && b.x1 - b.x0 + 1 < 0.5 * cw0));
+  const digs = group(keep).filter(c => near(c, band));
+  if (digs.length < 3 || digs.length > 4) return null; // m:ss or mm:ss
+  // The widest gap must be the one before the seconds (where "min" sits); otherwise a digit is missing.
+  const gaps = digs.slice(1).map((c, i) => c.x0 - digs[i].x1);
+  const minGap = gaps[gaps.length - 2];
+  if (gaps.some((g, i) => i !== gaps.length - 2 && g >= minGap)) return null;
+  const top = Math.min(...digs.map(c => c.y0)), H = Math.max(...digs.map(c => c.y1)) - top + 1;
+  let CW = Math.max(...digs.map(c => c.x1 - c.x0 + 1));
+  if (CW < H * 0.35) CW = Math.round(H * 0.52); // all of them are 1s: use the usual digit shape
+  const cells = [], vals = [];
+  for (const c of digs) {
+    const cx = c.x1 - CW + 1; let on = '';
+    for (const sgm of 'abcdefg') {
+      const [fx0, fx1, fy0, fy1] = SEG_BOX[sgm];
+      const rx0 = cx + Math.floor(fx0 * CW), rx1 = cx + Math.max(Math.floor(fx0 * CW) + 1, Math.ceil(fx1 * CW));
+      const ry0 = top + Math.floor(fy0 * H), ry1 = top + Math.max(Math.floor(fy0 * H) + 1, Math.ceil(fy1 * H));
+      let n = 0, hit = 0;
+      for (let y = ry0; y < ry1; y++) for (let x = rx0; x < rx1; x++) { if (x < 0 || y < 0 || x >= w || y >= h) continue; n++; hit += m[y * w + x]; }
+      if (n && hit / n >= 0.25) on += sgm;
+    }
+    cells.push({ x: cx, y: top, w: CW, h: H, on });
+    vals.push(SEG7[on]);
+  }
+  if (vals.some(v => v === undefined)) return { cells, value: null };
+  const ss = vals[vals.length - 2] * 10 + vals[vals.length - 1];
+  const mm = vals.length === 4 ? vals[0] * 10 + vals[1] : vals[0];
+  if (ss > 59) return { cells, value: null };
+  return { cells, mm, ss, value: mm * 60 + ss };
+}
+const fmt = t => { t = Math.max(0, Math.floor(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+const parseMS = s => { const m = /^\s*(\d{1,3})(?::(\d{1,2}))?\s*$/.exec(s || ''); if (!m) return null; return m[2] == null ? +m[1] : +m[1] * 60 + +m[2]; };
+const lootNow = now => LOOT.lock ? LOOT.lock.base - (now - LOOT.lock.at) / 1000 : null;
+// The next ka-ching time (counting down from the run length in steps of `every`), or null.
+function nextLoot(cur) {
+  const L = LOOT; if (cur == null || L.every < 5) return null;
+  const k = Math.floor((L.run - cur) / L.every) + 1, p = L.run - k * L.every;
+  return p > 0 ? p : null;
+}
+function lootReady() { return LOOT.enabled && LOOT.area && source && !(mode && mode.w === LOOT); }
+function lootTick(now) {
+  const L = LOOT;
+  if (!lootReady() || paused) return;
+  // Read the box until two readings agree, then every 10 s just to stay in sync.
+  const due = L.lock ? (now - L.lastOk >= 10000 && now - L.lastRead >= 1000) : now - L.lastRead >= 450;
+  if (due) {
+    L.lastRead = now;
+    const data = readRegion(grab(), clampRect(L.area, frameSize()));
+    L.lastArea = data;
+    const r = readTimer(data);
+    L.cells = r ? r.cells : null;
+    handleReading(r && r.value != null ? r : null, now);
+  }
+  const cur = lootNow(now);
+  if (cur == null) return;
+  if (cur < -3) { L.lock = null; L.lastCur = null; log('Loot timer: the run ended.'); return; }
+  if (L.lastCur != null && cur < L.lastCur) {
+    for (let k = 1; L.run - k * L.every > 0; k++) {
+      const p = L.run - k * L.every;
+      if (L.lastCur > p && p >= cur) {
+        log('Loot! (' + fmt(p) + ' left)', 'ok');
+        if (!G.muted && !L.muted) kaching();
+      }
+    }
+    if (!L.warned && L.lastCur > L.warn && L.warn >= cur) {
+      L.warned = true;
+      log('Loot timer: ' + fmt(L.warn) + ' left!', 'bad');
+      if (!G.muted && !L.muted) { warnTone(); setTimeout(() => say(L.warn + ' seconds left'), 750); }
+    }
+  }
+  L.lastCur = cur;
+}
+function handleReading(r, now) {
+  const L = LOOT;
+  if (!r) {
+    if (L.lock && now - L.lastOk > 25000 && !L.lost) { L.lost = true; L.lock = null; L.lastCur = null; log('Loot timer: can\'t see the timer any more (left the map?).'); }
+    return;
+  }
+  L.read = r; L.readAt = now; L.lost = false;
+  const est = r.value + 0.5; // a shown second lasts a whole second: aim for its middle
+  const agrees = q => q && Math.abs(q.v - (now - q.t) / 1000 - est) <= 1.5;
+  if (!L.lock) {
+    if (agrees(L.pend)) {
+      L.lock = { base: est, at: now }; L.lastOk = now; L.pend = null; L.lastCur = est; L.warned = est <= L.warn;
+      log('Loot timer: synced at ' + fmt(r.value) + '. Next ka-ching at ' + (nextLoot(est) != null ? fmt(nextLoot(est)) : '–') + '.', 'ok');
+    } else L.pend = { v: est, t: now };
+    return;
+  }
+  const diff = est - lootNow(now);
+  if (Math.abs(diff) <= 2) { if (Math.abs(diff) > 0.7) L.lock = { base: est, at: now }; L.lastOk = now; L.pend = null; return; }
+  // A big jump (you re-entered the map, or the timer was misread): believe it once two readings agree.
+  if (agrees(L.pend)) {
+    L.lock = { base: est, at: now }; L.lastOk = now; L.pend = null; L.lastCur = est; L.warned = est <= L.warn;
+    log(diff > 0 ? 'Loot timer: new run (' + fmt(r.value) + ').' : 'Loot timer: re-synced at ' + fmt(r.value) + '.', 'ok');
+  } else { L.pend = { v: est, t: now }; L.lastRead = now - 600; } // check again shortly
+}
+
 /* ---------------- the check ---------------- */
 const ready = w => w.enabled && w.area && w.prepared && (w.kind !== 'count' || w.digit);
 // Something worth a closer look: check at full speed until it settles.
@@ -748,7 +1010,8 @@ let lastCheck = 0, lastSig = 0, prevUnion = null, prevUnionKey = '';
 async function tick() {
   if (busy || !source || paused) return;
   const now = Date.now();
-  if (now - lastCheck < (urgent() ? BEAT : G.interval) - 40) { ring(now); return; }
+  try { lootTick(now); } catch (e) { console.error(e); }
+  if (now - lastCheck < (urgent() ? BEAT : G.interval) - 40) { ring(now); refreshStatus(); return; }
   lastCheck = now;
   busy = true;
   const t0 = performance.now();
@@ -841,7 +1104,7 @@ function check(w, data, now) {
 }
 function updatePresence(w, res, still, now) {
   if (res.present) {
-    if (w.alarmOn) { log(w.name + ' is back.', 'ok'); chime(); }
+    if (w.alarmOn) { log(w.name + ' is back.', 'ok'); if (!G.muted && !w.muted) chime(); }
     w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.lastSeen = now;
     w.alarmOn = false; w.silenced = false; w.rings = 0;
   } else {
@@ -874,10 +1137,10 @@ function updateCount(w, res, now) {
 }
 function ring(now) {
   if (paused) return;
-  const items = W.filter(w => w.enabled && w.alarmOn && !w.silenced);
+  const items = W.filter(w => w.enabled && w.alarmOn && !w.silenced && !w.muted);
   if (frozen && !frozenSilenced) items.push('frozen');
   setTitle();
-  if (!items.length) return;
+  if (!items.length || G.muted) return;
   if (now - lastRing < Math.max(1200, 2400 / items.length)) return;
   lastRing = now;
   const it = items[ringIdx++ % items.length];
@@ -930,7 +1193,7 @@ let lastDraw = 0;
 function loop(t) {
   requestAnimationFrame(loop);
   // Smooth while you box something; once a second while just watching (it's only a preview).
-  if (!source || t - lastDraw < (mode || drag ? 60 : 1000)) return;
+  if (!source || t - lastDraw < (mode || drag ? 60 : 1000) || (isMini() && !mode)) return;
   lastDraw = t;
   drawMain();
   W.forEach(w => {
@@ -938,6 +1201,7 @@ function loop(t) {
     if (boxingIcon ? !(drag && drag.canvas === w.el.zoom) : (w.area && !w.prepared)) drawZoomLive(w);
     else if (!boxingIcon) { if (w.lastArea) drawZoom(w); else if (w.area) drawZoomLive(w); }
   });
+  if (LOOT.area && !(mode && mode.w === LOOT)) drawTimerZoom(LOOT);
 }
 function drawMain() {
   const f = frameSize(); if (!f || !f.w) return;
@@ -945,7 +1209,7 @@ function drawMain() {
   mctx.drawImage(drag ? snap : source.el, 0, 0); // live picture, paused only while you drag a box
   const lw = Math.max(2, f.w / 450);
   mctx.lineWidth = lw;
-  for (const w of W) {
+  for (const w of ALL) {
     if (!w.area || !w.enabled || (mode && mode.w === w && mode.step === 'area')) continue;
     mctx.setLineDash([lw * 4, lw * 3]);
     mctx.strokeStyle = w.alarmOn && !w.silenced ? '#ff4f61' : w.color;
@@ -971,6 +1235,7 @@ function sizeZoom(w) {
   w.el.zoom.style.width = Math.floor(w.area.w * scale) + 'px';
 }
 function drawZoom(w) {
+  if (w.kind === 'timer') return drawTimerZoom(w);
   const A = w.lastArea, z = w.el.zoom, ctx = w.el.zctx;
   if (!w.area || !A || (mode && mode.w === w && mode.step === 'icon')) return;
   if (z.width !== A.width || z.height !== A.height) { z.width = A.width; z.height = A.height; sizeZoom(w); }
@@ -990,6 +1255,15 @@ function drawZoom(w) {
     ctx.beginPath(); ctx.moveTo(L.x, L.y + P.th + 0.5); ctx.lineTo(L.x + P.tw, L.y + P.th + 0.5); ctx.stroke();
     ctx.setLineDash([]);
   }
+}
+function drawTimerZoom(w) {
+  const A = w.lastArea, z = w.el.zoom, ctx = w.el.zctx;
+  if (!A) { if (w.area && source) drawZoomLive(w); return; }
+  if (z.width !== A.width || z.height !== A.height) { z.width = A.width; z.height = A.height; sizeZoom(w); }
+  ctx.putImageData(A, 0, 0);
+  if (!w.cells) return;
+  ctx.lineWidth = 1;
+  w.cells.forEach(c => { ctx.strokeStyle = SEG7[c.on] === undefined ? '#ff4f61' : '#41d99a'; ctx.strokeRect(c.x - 0.5, c.y - 0.5, c.w + 1, c.h + 1); });
 }
 function drawZoomLive(w) { // area boxed but no icon yet: keep the zoom showing the picture
   const r = clampRect(w.area, frameSize()), z = w.el.zoom;
@@ -1101,6 +1375,13 @@ function cancelMode() {
   refreshUI();
 }
 function finishArea(w, r) {
+  if (w.kind === 'timer') {
+    if (r.w < 30 || r.h < 12) { hint('That box is too small. Drag around the whole <b>Time Left</b> box.', true); return; }
+    w.area = r; w.savedFrame = frameSize(); resetLoot(); mode = null;
+    log('Loot timer: Time Left box set (' + r.w + '×' + r.h + '). Reading it…');
+    save(); refreshUI(); drawZoomLive(w);
+    return;
+  }
   if (r.w < 12 || r.h < 12) { hint('That box is too small. Drag around <b>all</b> of your buff icons.', true); return; }
   const f = frameSize(), sameSize = w.savedFrame && w.savedFrame.w === f.w && w.savedFrame.h === f.h;
   w.area = r; w.savedFrame = f;
@@ -1189,6 +1470,7 @@ function buildWatcher(w) {
       <button class="btn small bIcon">Box icon</button>
       <button class="btn small bRecal">Recalibrate</button>
       <button class="btn small bSilence">${presence ? "Silence until it's back" : 'Silence until it changes'}</button>
+      <button class="btn small bMute">Mute</button>
       <button class="btn small bTest">Test sound</button>
     </div>
     <div class="view zoomView">
@@ -1236,7 +1518,7 @@ function buildWatcher(w) {
     title: q('.wname'), rule: q('.rule'), status: q('.status'), big: q('.big'), small: q('.small'),
     meter: q('.meter'), fill: q('.meter i'), mark: q('.meter u'), score: q('.kScore'), digit: q('.kDigit'),
     seen: q('.kSeen'), ms: q('.kMs'), note: q('.note'), dRef: q('.dRef'), dLive: q('.dLive'),
-    bArea: q('.bArea'), bIcon: q('.bIcon'), bRecal: q('.bRecal'), bSilence: q('.bSilence'), bTest: q('.bTest'),
+    bArea: q('.bArea'), bIcon: q('.bIcon'), bRecal: q('.bRecal'), bSilence: q('.bSilence'), bTest: q('.bTest'), bMute: q('.bMute'),
     on: $(id('on')), name: $(id('name')), target: $(id('target')), builtin: $(id('builtin')), grace: $(id('grace')), thr: $(id('thr')), ign: $(id('ign')), dig: $(id('dig')),
     vGrace: q('.vGrace'), vThr: q('.vThr'), vIgn: q('.vIgn'), vDig: q('.vDig'),
   };
@@ -1247,6 +1529,7 @@ function buildWatcher(w) {
   E.bRecal.addEventListener('click', () => startCalibration(w));
   E.bSilence.addEventListener('click', () => { w.silenced = true; try { speechSynthesis.cancel(); } catch (e) {} log(w.name + ': alarm silenced.'); refreshStatus(); setTitle(); });
   E.bTest.addEventListener('click', () => { ensureAudio(); setTimeout(() => { sound(w.kind); setTimeout(() => say(spoken(w)), 850); }, 50); });
+  E.bMute.addEventListener('click', () => toggleMute(w));
   E.on.addEventListener('change', () => {
     w.enabled = E.on.checked;
     if (!w.enabled) { w.alarmOn = false; w.silenced = false; }
@@ -1311,6 +1594,7 @@ function refreshUI() {
       E.chip.textContent = w.name;
       E.chip.setAttribute('aria-pressed', String((mode && mode.step === 'area' ? mode.w : (areaFor || W[0])) === w));
     }
+    setText(E.bMute, w.muted ? 'Unmute' : 'Mute');
     E.bArea.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'area'));
     E.bIcon.classList.toggle('on', !!(mode && mode.w === w && mode.step === 'icon'));
     E.zoomView.classList.toggle('selecting', !!(mode && mode.w === w && mode.step === 'icon'));
@@ -1324,6 +1608,7 @@ function refreshUI() {
   else if (!has) hint(W.some(w => w.prepared && w.area)
     ? 'Your setup is saved. Click <b>Share game window</b> and pick MapleStory to start watching.'
     : 'Click <b>Share game window</b> and choose the MapleStory window.');
+  else if (mode && mode.step === 'area' && mode.w.kind === 'timer') hint('<b>Loot timer:</b> drag a box around the <b>Time Left</b> box (the timer near the top of the game). The picture pauses while you drag.');
   else if (mode && mode.step === 'area') hint('<b>' + escapeHTML(mode.w.name) + ':</b> drag a box around the buff icons that include it (top right of the game). Icons move when other buffs end, so take the whole block. The picture pauses while you drag.');
   else if (mode && mode.step === 'icon') hint(mode.w.kind === 'presence'
     ? 'In the <b>' + escapeHTML(mode.w.name) + '</b> section, drag a tight box around its icon. The buff must be on right now.'
@@ -1331,6 +1616,7 @@ function refreshUI() {
   else if (W.some(ready)) hint('<b>Watching.</b> Leave this window open. To redo a box, drag on the game screen (area) or in a zoomed view (icon).');
   else hint('Set up a buff below: click <b>Box buff area</b> in its section.');
   $('btnFrozenSilence').hidden = !(frozen && !frozenSilenced);
+  refreshLootUI();
   refreshStatus();
 }
 // Page updates only when a value changed: rewriting the same text 4 times a second still costs layout.
@@ -1339,6 +1625,9 @@ function setClass(el, v) { if (el.className !== v) el.className = v; }
 function setStyle(el, k, v) { if (el.style[k] !== v) el.style[k] = v; }
 function setProp(el, k, v) { if (el[k] !== v) el[k] = v; }
 function refreshStatus() {
+  const now = Date.now();
+  renderLoot(now);
+  setText($('btnMuteAll'), G.muted ? 'Unmute all' : 'Mute all'); $('btnMuteAll').setAttribute('aria-pressed', String(G.muted));
   for (const w of W) {
     const E = w.el, st = E.status, L = w.last;
     let cls = '';
@@ -1390,6 +1679,166 @@ function refreshStatus() {
         ? 'Box the icon while the buff is on. It then measures itself for 2 s.'
         : 'Box the icon while it shows any number (for example 1), number included. It then measures itself for 2 s.');
   }
+  renderMini(now);
+}
+
+/* ---------------- loot timer section ---------------- */
+function buildLoot() {
+  const w = LOOT, sec = document.createElement('section');
+  sec.className = 'card watch'; sec.style.setProperty('--wc', w.color); sec.id = 'w-loot';
+  sec.innerHTML = `
+    <div class="whead">
+      <h3><span class="dot" aria-hidden="true"></span><span class="wname">Loot timer</span></h3>
+      <span class="rule"></span>
+      <label class="check"><input type="checkbox" id="loot-on"> Watch</label>
+    </div>
+    <div class="status"><div class="big"></div><div class="small"></div></div>
+    <dl class="kv">
+      <dt>Last reading</dt><dd class="kRead">–</dd>
+      <dt>Next ka-ching at</dt><dd class="kNext">–</dd>
+      <dt>Re-checks the timer</dt><dd>every 10 s</dd>
+    </dl>
+    <div class="btns">
+      <button class="btn small bArea">Box the Time Left box</button>
+      <button class="btn small bSync">Read now</button>
+      <button class="btn small bMute">Mute</button>
+      <button class="btn small bTest">Test sounds</button>
+    </div>
+    <div class="view zoomView">
+      <div class="empty zEmpty">Box the Time Left box (the timer near the top of the game). It shows up here, with each digit it reads framed.</div>
+      <canvas class="zoom" hidden></canvas>
+    </div>
+    <div class="fields3">
+      <div class="field"><label for="loot-every">Ka-ching every</label><input type="text" id="loot-every" inputmode="numeric" maxlength="6"></div>
+      <div class="field"><label for="loot-warn">Warn when left</label><input type="text" id="loot-warn" inputmode="numeric" maxlength="6"></div>
+      <div class="field"><label for="loot-run">Run starts at</label><input type="text" id="loot-run" inputmode="numeric" maxlength="6"></div>
+    </div>
+    <p class="note">Times as m:ss. Ka-chings fall at fixed times counted down from the start (30:00 → 28:10, 26:20 …). It reads the timer once, counts down itself and re-checks every 10 s.</p>`;
+  $('watchers').prepend(sec);
+  const q = x => sec.querySelector(x), zoom = q('.zoom');
+  w.el = { sec, zoom, zctx: zoom.getContext('2d'), zoomView: q('.zoomView'), zEmpty: q('.zEmpty'), title: q('.wname'), rule: q('.rule'),
+    status: q('.status'), big: q('.big'), small: q('.small'), kRead: q('.kRead'), kNext: q('.kNext'),
+    bArea: q('.bArea'), bSync: q('.bSync'), bMute: q('.bMute'), bTest: q('.bTest'), on: $('loot-on'), every: $('loot-every'), warn: $('loot-warn'), run: $('loot-run') };
+  const E = w.el;
+  E.bArea.addEventListener('click', () => beginMode(w, 'area'));
+  E.bSync.addEventListener('click', () => { w.lock = null; w.pend = null; w.lastRead = 0; w.lastCur = null; log('Loot timer: reading the timer again.'); refreshStatus(); });
+  E.bMute.addEventListener('click', () => toggleMute(w));
+  E.bTest.addEventListener('click', () => { ensureAudio(); setTimeout(() => { kaching(); setTimeout(() => { warnTone(); setTimeout(() => say(w.warn + ' seconds left'), 750); }, 1200); }, 50); });
+  E.on.addEventListener('change', () => { w.enabled = E.on.checked; resetLoot(); log('Loot timer: ' + (w.enabled ? 'on.' : 'off.')); save(); refreshUI(); });
+  const bindTime = (el, key, min) => el.addEventListener('change', () => {
+    const v = parseMS(el.value);
+    if (v != null && v >= min) { w[key] = v; save(); log('Loot timer: ' + { every: 'ka-ching every ', warn: 'warning at ', run: 'run starts at ' }[key] + fmt(v) + '.'); }
+    el.value = fmt(w[key]); refreshUI();
+  });
+  bindTime(E.every, 'every', 10); bindTime(E.warn, 'warn', 0); bindTime(E.run, 'run', 60);
+}
+function refreshLootUI() {
+  const w = LOOT, E = w.el, has = !!source;
+  setText(E.rule, 'Ka-ching every ' + fmt(w.every));
+  E.sec.style.opacity = w.enabled ? '' : '0.7';
+  setText(E.bArea, w.area ? 'Redo Time Left box' : 'Box the Time Left box');
+  setText(E.bMute, w.muted ? 'Unmute' : 'Mute');
+  E.bArea.classList.toggle('on', !!(mode && mode.w === w));
+  const zoomOn = has && !!w.area;
+  E.zEmpty.hidden = zoomOn; E.zoom.hidden = !zoomOn;
+  if (zoomOn) sizeZoom(w);
+  E.on.checked = w.enabled;
+  [['every', E.every], ['warn', E.warn], ['run', E.run]].forEach(([k, el]) => { if (document.activeElement !== el) el.value = fmt(w[k]); });
+  if (E.chip) { E.chip.textContent = w.name; E.chip.setAttribute('aria-pressed', String((mode && mode.step === 'area' ? mode.w : (areaFor || W[0])) === w)); }
+}
+function lootView(now) { // [big, small, class] for the loot timer, shared by both views
+  const L = LOOT, cur = lootNow(now);
+  if (!L.enabled) return ['OFF', 'Tick "Watch" to turn it on.', 'off'];
+  if (paused) return ['PAUSED', 'Click Resume to watch again.', 'paused'];
+  if (!L.area) return ['NOT SET UP', 'Box the Time Left box near the top of the game.', ''];
+  if (!source) return ['READY', 'Share your game window to start.', ''];
+  if (mode && mode.w === L) return ['SETTING UP', 'Drag a box around the Time Left box.', ''];
+  if (cur == null) return L.lost ? ['NOT VISIBLE', "Can't see the timer (left the map?). It syncs again when it shows up.", 'pending']
+    : ['READING…', L.read ? 'Checking the reading…' : 'Looking for the timer digits…', 'pending'];
+  const nx = nextLoot(cur);
+  if (cur <= L.warn) return [fmt(cur), 'Run ending in ' + fmt(cur) + '!', 'bad'];
+  return [fmt(cur), nx != null ? 'Next loot in ' + fmt(cur - nx) : 'No more loot this run', 'ok'];
+}
+function renderLoot(now) {
+  const L = LOOT, E = L.el, [big, small, cls] = lootView(now);
+  setText(E.big, big); setText(E.small, small);
+  setClass(E.status, 'status' + (cls === 'bad' ? ' quiet' : cls ? ' ' + cls : ''));
+  setText(E.kRead, L.read ? fmt(L.read.value) + ' at ' + new Date(L.readAt).toLocaleTimeString() : '–');
+  const nx = nextLoot(lootNow(now));
+  setText(E.kNext, nx != null ? fmt(nx) + ' left' : '–');
+}
+function toggleMute(w) {
+  w.muted = !w.muted;
+  if (w.muted) { try { speechSynthesis.cancel(); } catch (e) {} }
+  log(w.name + (w.muted ? ': muted.' : ': sound on.'));
+  save(); refreshUI();
+}
+function setMuteAll(on) {
+  G.muted = on;
+  if (on) { try { speechSynthesis.cancel(); } catch (e) {} }
+  log(on ? 'All sounds muted.' : 'Sounds on.');
+  save(); refreshUI();
+}
+
+/* ---------------- mini view ---------------- */
+function buildMini() {
+  W.forEach(w => {
+    const row = document.createElement('div');
+    row.className = 'mcard mw'; row.style.setProperty('--wc', w.color);
+    row.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="mname"></span><span class="mstate"></span><button class="mtog"></button>';
+    const btn = row.querySelector('.mtog');
+    btn.addEventListener('click', () => {
+      if (w.alarmOn && !w.silenced && !w.muted) { w.silenced = true; try { speechSynthesis.cancel(); } catch (e) {} log(w.name + ': alarm silenced.'); refreshUI(); setTitle(); }
+      else toggleMute(w);
+    });
+    w.mini = { row, name: row.querySelector('.mname'), state: row.querySelector('.mstate'), btn };
+    $('mRows').append(row);
+  });
+  $('mLootMute').addEventListener('click', () => toggleMute(LOOT));
+  $('mPause').addEventListener('click', () => { ensureAudio(); setPaused(!paused); });
+  $('mMute').addEventListener('click', () => setMuteAll(!G.muted));
+  $('mFull').addEventListener('click', () => { G.view = 'full'; applyView(); });
+  $('mExpand').addEventListener('click', () => { G.view = 'full'; applyView(); });
+  $('mShare').addEventListener('click', () => { if (source && source.kind === 'video') { stopSource(); log('Screen sharing stopped.'); refreshUI(); } else startShare(); });
+}
+const isMini = () => document.body.classList.contains('mini');
+function applyView() {
+  const mini = G.view === 'mini' || (G.view === 'auto' && window.innerWidth < 600);
+  if (mini === isMini()) return;
+  document.body.classList.toggle('mini', mini);
+  $('mini').hidden = !mini;
+  if (!mini) { ALL.forEach(sizeZoom); lastDraw = 0; }
+  renderMini(Date.now());
+}
+function renderMini(now) {
+  if (!isMini()) return;
+  const sharing = !!source, alert = W.some(w => w.enabled && w.alarmOn && !w.silenced) || (frozen && !frozenSilenced);
+  const [st, sc] = !sharing ? ['OFF', ''] : paused ? ['PAUSED', 'warn'] : alert ? ['ALERT', 'bad'] : ['ON', 'on'];
+  setText($('mState'), st); setClass($('mState').parentNode, 'mstat' + (sc ? ' ' + sc : ''));
+  const L = LOOT, showLoot = L.enabled && L.area;
+  $('mLoot').hidden = !showLoot;
+  if (showLoot) {
+    const [big, small, cls] = lootView(now), timeShown = /^\d+:\d\d$/.test(big);
+    setText($('mLootBig'), timeShown ? big : '–:–');
+    setText($('mLootSub'), timeShown ? small : big.charAt(0) + big.slice(1).toLowerCase() + ' · ' + small);
+    setClass($('mLoot'), 'mcard mloot' + (cls === 'bad' ? ' ending' : timeShown ? '' : ' idle'));
+    setText($('mLootChip'), L.lock ? 'Auto' : 'Syncing');
+    setText($('mLootMute'), L.muted ? 'Muted' : 'Unmuted'); setClass($('mLootMute'), 'mtog' + (L.muted ? ' muted' : ''));
+  }
+  W.forEach(w => {
+    const M = w.mini, show = w.enabled && !!w.area;
+    M.row.hidden = !show; if (!show) return;
+    setText(M.name, w.name);
+    setText(M.state, w.el.big.textContent);
+    const c = (w.el.status.className.split(' ')[1] || '');
+    setClass(M.row, 'mcard mw' + (c ? ' ' + c : ''));
+    const ringing = w.alarmOn && !w.silenced && !w.muted;
+    setText(M.btn, ringing ? 'Silence' : w.muted ? 'Muted' : 'Unmuted');
+    setClass(M.btn, 'mtog' + (ringing ? ' silence' : w.muted ? ' muted' : ''));
+  });
+  const mp = $('mPause'); setText(mp.querySelector('span'), paused ? 'Resume' : 'Pause'); mp.setAttribute('aria-pressed', String(paused));
+  const mm = $('mMute'); setText(mm.querySelector('span'), G.muted ? 'Unmute all' : 'Mute all'); mm.setAttribute('aria-pressed', String(G.muted));
+  setText($('mShare'), sharing && source.kind === 'video' ? 'Stop sharing' : 'Share game window');
 }
 
 /* ---------------- shared settings controls ---------------- */
@@ -1416,8 +1865,9 @@ function bindSettings() {
 }
 
 W.forEach(buildWatcher);
+buildLoot();
 attachDrag(mainCanvas, beginAreaDrag, finishArea, drawMain);
-W.forEach(w => {
+ALL.forEach(w => {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'chip'; b.style.setProperty('--wc', w.color);
   b.addEventListener('click', () => {
@@ -1438,22 +1888,27 @@ function setPaused(on) {
     w.alarmOn = false; w.silenced = false; w.missStreak = 0; w.missSince = null; w.stillMisses = 0;
     w.prevPatch = null; w.hitStreak = 0; w.clearStreak = 0; w.lostSince = null; w.last = null;
   });
+  LOOT.lastCur = null; LOOT.lastOk = 0; // re-check the timer on resume, and never ding for time spent paused
   const b = $('btnPause');
   b.textContent = on ? 'Resume' : 'Pause'; b.setAttribute('aria-pressed', String(on));
   log(on ? 'Paused: no checks, no alarms.' : 'Resumed watching.');
   setTitle(); refreshUI();
 }
 $('btnPause').addEventListener('click', () => { ensureAudio(); setPaused(!paused); });
+$('btnMuteAll').addEventListener('click', () => setMuteAll(!G.muted));
+$('btnMini').addEventListener('click', () => { G.view = 'mini'; applyView(); });
+buildMini();
 $('btnStop').addEventListener('click', () => { stopSource(); log('Screen sharing stopped.'); refreshUI(); });
 $('fileShot').addEventListener('change', e => { useScreenshot(e.target.files[0]); e.target.value = ''; });
 $('btnCancel').addEventListener('click', cancelMode);
 $('btnFrozenSilence').addEventListener('click', () => { frozenSilenced = true; try { speechSynthesis.cancel(); } catch (e) {} log('Frozen-picture alarm silenced.'); refreshUI(); setTitle(); });
 $('btnClearLog').addEventListener('click', () => { $('log').innerHTML = ''; });
-window.addEventListener('resize', () => W.forEach(sizeZoom));
+window.addEventListener('resize', () => { ALL.forEach(sizeZoom); applyView(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && mode) cancelMode(); });
 
 load();
 bindSettings();
+applyView();
 refreshUI();
 loadBuiltin(() => { W.forEach(w => { if (w.builtin) useTemplate(w); }); refreshUI(); });
 requestAnimationFrame(loop);
