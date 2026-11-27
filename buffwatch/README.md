@@ -36,7 +36,7 @@ the old `buff-watch.html` (not as `buff-watch(6).html`) to keep it. **Try a scre
 
 ## How it detects
 
-Four times a second each watcher searches its boxed area for its icon, comparing pixel colours.
+Each check, every watcher searches its boxed area for its icon, comparing pixel colours.
 The icon is scored as a 3×3 grid using its best 6 squares, so up to a third of it can be covered
 (mouse, tooltip, damage numbers). Right after you box an icon it measures itself for 2 s: how well
 the icon matches, and how well the best look-alike elsewhere in the area matches. The "found"
@@ -62,5 +62,12 @@ alarm stops once a different number shows, or the icon is gone for 3 s.
 
 If the game picture stops changing for 20 s (e.g. the game was minimized) it also alarms, because
 it can no longer see the buffs. That alarm can be turned off under **Alarm**.
+
+**CPU use** (under **Alarm**): *Balanced* (default) checks twice a second and jumps to four times a
+second the moment an icon looks off, so alarms stay quick; *Saver* checks once a second when calm;
+*Fast* always checks four times a second. To keep CPU low it also asks the browser for only 8
+frames a second, reads the screen once per check for all buffs, reuses the last result when the buff
+areas haven't changed, skips the area search while an icon is clearly at its last spot, and
+refreshes the preview once a second while just watching.
 
 **Pause** (top of the page) stops all checks and alarms until you click **Resume**, e.g. while AFK.

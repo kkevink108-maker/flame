@@ -170,6 +170,15 @@ details .inner{display:flex;flex-direction:column;gap:10px}
           <input type="range" id="inVol" min="0" max="100" step="5">
         </div>
         <label class="check"><input type="checkbox" id="inVoice"> Also speak the alert out loud</label>
+        <div class="field">
+          <label for="inRate">CPU use</label>
+          <select id="inRate">
+            <option value="250">Fast: always checks 4 times a second</option>
+            <option value="500">Balanced: 2 a second, 4 when something changes</option>
+            <option value="1000">Saver: 1 a second, 4 when something changes</option>
+          </select>
+          <small>Balanced and Saver speed up the moment an icon looks off, so alarms stay quick.</small>
+        </div>
         <label class="check"><input type="checkbox" id="inFrozen"> Alarm when the game picture freezes (e.g. game minimized)</label>
         <details>
           <summary>Fine-tuning</summary>
@@ -177,10 +186,6 @@ details .inner{display:flex;flex-direction:column;gap:10px}
             <div class="field">
               <label for="inTol">Colour tolerance <span id="vTol"></span></label>
               <input type="range" id="inTol" min="15" max="150" step="5">
-            </div>
-            <div class="field">
-              <label for="inRate">Checks per second</label>
-              <select id="inRate"><option value="250">4</option><option value="500">2</option><option value="1000">1</option></select>
             </div>
           </div>
         </details>
@@ -215,7 +220,7 @@ const $ = id => document.getElementById(id);
 const STORE_KEY = 'buffwatch.v4', OLD_KEY = 'buffwatch.v3';
 
 /* ---------------- shared settings ---------------- */
-const G = { tol: 100, interval: 250, volume: 0.6, voice: true, frozenAlarm: true };
+const G = { tol: 100, interval: 500, cpuV: 1, volume: 0.6, voice: true, frozenAlarm: true };
 let paused = false; // Pause button: no checks, no alarms
 
 /* ---------------- watchers ---------------- */
@@ -298,6 +303,7 @@ function load() {
   }
   if (!d) return;
   for (const k in G) if (d.G && d.G[k] != null) G[k] = d.G[k];
+  if (!(d.G && d.G.cpuV)) { if (G.interval === 250) G.interval = 500; G.cpuV = 1; } // older versions: switch to Balanced
   W.forEach(w => {
     const s = d.ws && d.ws[w.id]; if (!s) return;
     PERSIST.forEach(k => { if (s[k] != null) w[k] = s[k]; });
@@ -372,16 +378,17 @@ function chime() { // pleasant "all good again" sound
 /* ---------------- background-safe ticker ---------------- */
 // Timers inside a Worker keep running when this tab is in the background.
 let ticker = null;
+const BEAT = 250; // the fastest check rate; calm periods check less often (G.interval)
 function startTicker() {
   stopTicker();
   try {
     const src = 'let t=null;onmessage=e=>{clearInterval(t);if(e.data>0)t=setInterval(()=>postMessage(0),e.data)}';
     const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
     wk.onmessage = tick;
-    wk.postMessage(G.interval);
+    wk.postMessage(BEAT);
     ticker = { stop: () => wk.terminate() };
   } catch (e) {
-    const id = setInterval(tick, G.interval);
+    const id = setInterval(tick, BEAT);
     ticker = { stop: () => clearInterval(id) };
   }
 }
@@ -410,7 +417,7 @@ async function startShare() {
   }
   let stream;
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 20 } }, audio: false });
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 8, max: 10 } }, audio: false });
   } catch (e) {
     hint('Sharing was cancelled. Click <b>Share game window</b> to try again.', true);
     return;
@@ -658,7 +665,12 @@ function robust(img, P, tol, x, y) {
 }
 // Where is it, and how well does it match? Checks the best spot found by the search and the
 // spot it was last seen at (it may be partly covered there, which the search alone can miss).
-function locate(img, P, tol, anchor) {
+function locate(img, P, tol, anchor, cut) {
+  // Still clearly there at its last spot? Then there's no need to search the rest of the area.
+  if (anchor) {
+    const a = robust(img, P, tol, anchor.x, anchor.y);
+    if (a >= Math.min(0.97, cut + 0.12)) return { x: anchor.x, y: anchor.y, score: a };
+  }
   const g = match(img, P, tol, anchor);
   let best = { x: g.x, y: g.y, score: robust(img, P, tol, g.x, g.y) };
   if (anchor && (anchor.x !== g.x || anchor.y !== g.y)) {
@@ -730,26 +742,40 @@ function frameChanged() {
 
 /* ---------------- the check ---------------- */
 const ready = w => w.enabled && w.area && w.prepared && (w.kind !== 'count' || w.digit);
+// Something worth a closer look: check at full speed until it settles.
+const urgent = () => W.some(w => ready(w) && (w.calib || w.missStreak > 0 || w.hitStreak > 0 || (w.alarmOn && !w.silenced)));
+let lastCheck = 0, lastSig = 0, prevUnion = null, prevUnionKey = '';
 async function tick() {
   if (busy || !source || paused) return;
+  const now = Date.now();
+  if (now - lastCheck < (urgent() ? BEAT : G.interval) - 40) { ring(now); return; }
+  lastCheck = now;
   busy = true;
   const t0 = performance.now();
   try {
     const f = frameSize();
     if (!f.w) return;
-    const now = Date.now();
-    const moving = frameChanged();
-    if (moving) { frozenSince = null; if (frozen) { frozen = false; frozenSilenced = false; log('Game picture is moving again.', 'ok'); } }
-    else if (!frozenSince) frozenSince = now;
-    else if (!frozen && G.frozenAlarm && now - frozenSince > FROZEN_MS) { frozen = true; frozenRings = 0; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
-    const img = grab();
-    for (const w of W) {
-      if (!ready(w) || (mode && mode.w === w)) continue;
-      check(w, img, f, moving, now);
+    if (now - lastSig >= 1000) { // frozen-picture check, once a second is plenty
+      lastSig = now;
+      if (frameChanged()) { frozenSince = null; if (frozen) { frozen = false; frozenSilenced = false; log('Game picture is moving again.', 'ok'); } }
+      else if (!frozenSince) frozenSince = now;
+      else if (!frozen && G.frozenAlarm && now - frozenSince > FROZEN_MS) { frozen = true; frozenRings = 0; log('Game picture froze. Is MapleStory minimized?', 'bad'); }
+    }
+    const act = W.filter(w => ready(w) && !(mode && mode.w === w));
+    if (act.length) {
+      // One read of the screen covering every buff area, instead of one per buff.
+      const rs = act.map(w => clampRect(w.area, f));
+      const ux0 = Math.min(...rs.map(r => r.x)), uy0 = Math.min(...rs.map(r => r.y));
+      const U = { x: ux0, y: uy0, w: Math.max(...rs.map(r => r.x + r.w)) - ux0, h: Math.max(...rs.map(r => r.y + r.h)) - uy0 };
+      const data = readRegion(grab(), U);
+      // Nothing changed since the last check? Then the last results still hold: skip the matching.
+      const key = act.map(w => w.id).join() + JSON.stringify(U);
+      const changed = act.some(w => w.calib || !w.last) || key !== prevUnionKey || !prevUnion || !sameBytes(prevUnion, data.data);
+      prevUnion = data.data; prevUnionKey = key;
+      act.forEach((w, i) => check(w, changed ? cropImage(data, U, rs[i]) : null, now));
+      if (changed) { const ms = Math.round(performance.now() - t0) + ' ms'; act.forEach(w => setText(w.el.ms, ms)); }
     }
     ring(now);
-    const ms = Math.round(performance.now() - t0) + ' ms';
-    W.forEach(w => { if (w.el.ms) w.el.ms.textContent = ready(w) && source ? ms : '–'; });
     refreshStatus();
   } catch (e) {
     console.error(e);
@@ -757,11 +783,33 @@ async function tick() {
     busy = false;
   }
 }
-function check(w, img, f, moving, now) {
+function sameBytes(a, b) {
+  if (a.length !== b.length) return false;
+  const x = new Uint32Array(a.buffer, a.byteOffset, a.length >> 2), y = new Uint32Array(b.buffer, b.byteOffset, b.length >> 2);
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+function cropImage(src, U, r) {
+  const out = new ImageData(r.w, r.h), sw = U.w * 4, rw = r.w * 4;
+  for (let j = 0; j < r.h; j++) {
+    const o = ((r.y - U.y + j) * U.w + (r.x - U.x)) * 4;
+    out.data.set(src.data.subarray(o, o + rw), j * rw);
+  }
+  return out;
+}
+// `data` is this buff's area, or null when nothing on screen changed since the last check.
+function check(w, data, now) {
   const P = w.prepared;
-  const data = readRegion(img, clampRect(w.area, f));
+  if (!data) {
+    if (!w.last || w.calib) return;
+    // Same picture as last time: same result. An empty spot that stays unchanged counts as "still".
+    if (w.kind === 'presence') updatePresence(w, w.last, !w.last.present && !!w.anchor, now);
+    else updateCount(w, w.last, now);
+    return;
+  }
   w.lastArea = data;
-  const res = locate(data, P, G.tol, w.anchor);
+  const moving = true;
+  const res = locate(data, P, G.tol, w.calib ? null : w.anchor, w.threshold);
   res.present = res.score >= w.threshold;
   if (w.kind === 'count') {
     const rd = res.present ? readDigit(data, w.digit, res.x, res.y) : null;
@@ -776,7 +824,6 @@ function check(w, img, f, moving, now) {
     w.anchor = { x: res.x, y: res.y };
     w.last = res;
     if (w.calib.present.length >= CALIB_CHECKS) finishCalibration(w);
-    drawZoom(w);
     return;
   }
   // Is the spot where it was last seen showing the same picture as last check?
@@ -791,7 +838,6 @@ function check(w, img, f, moving, now) {
   if (res.present) w.anchor = { x: res.x, y: res.y };
   w.last = res;
   if (w.kind === 'presence') updatePresence(w, res, still, now); else updateCount(w, res, now);
-  drawZoom(w);
 }
 function updatePresence(w, res, still, now) {
   if (res.present) {
@@ -852,7 +898,7 @@ function startCalibration(w) {
   if (!source || !ready(w)) return;
   w.calib = { present: [], look: [] };
   w.alarmOn = false; w.silenced = false; w.missStreak = 0; w.missSince = null; w.stillMisses = 0; w.hitStreak = 0; w.clearStreak = 0;
-  log(w.name + ': measuring the icon for ' + (CALIB_CHECKS * G.interval / 1000) + ' s. Keep it on screen.');
+  log(w.name + ': measuring the icon for ' + (CALIB_CHECKS * BEAT / 1000) + ' s. Keep it on screen.');
   refreshUI();
 }
 function finishCalibration(w) {
@@ -883,12 +929,14 @@ const pct = v => Math.round(v * 100) + '%';
 let lastDraw = 0;
 function loop(t) {
   requestAnimationFrame(loop);
-  if (!source || t - lastDraw < (mode || drag ? 60 : 250)) return; // calm preview while just watching
+  // Smooth while you box something; once a second while just watching (it's only a preview).
+  if (!source || t - lastDraw < (mode || drag ? 60 : 1000)) return;
   lastDraw = t;
   drawMain();
   W.forEach(w => {
     const boxingIcon = mode && mode.w === w && mode.step === 'icon';
     if (boxingIcon ? !(drag && drag.canvas === w.el.zoom) : (w.area && !w.prepared)) drawZoomLive(w);
+    else if (!boxingIcon) { if (w.lastArea) drawZoom(w); else if (w.area) drawZoomLive(w); }
   });
 }
 function drawMain() {
@@ -1061,7 +1109,7 @@ function finishArea(w, r) {
   if (w.builtin && w.tpl) {
     save(); mode = null;
     log(w.name + ': watching for the dice to show up (built-in icon, no icon box needed).');
-    refreshUI(); tick();
+    refreshUI(); drawZoomLive(w); tick();
     return;
   }
   if (w.tpl && sameSize && r.w >= w.tpl.width && r.h >= w.tpl.height) {
@@ -1285,18 +1333,23 @@ function refreshUI() {
   $('btnFrozenSilence').hidden = !(frozen && !frozenSilenced);
   refreshStatus();
 }
+// Page updates only when a value changed: rewriting the same text 4 times a second still costs layout.
+function setText(el, v) { if (el && el.textContent !== v) el.textContent = v; }
+function setClass(el, v) { if (el.className !== v) el.className = v; }
+function setStyle(el, k, v) { if (el.style[k] !== v) el.style[k] = v; }
+function setProp(el, k, v) { if (el[k] !== v) el[k] = v; }
 function refreshStatus() {
   for (const w of W) {
     const E = w.el, st = E.status, L = w.last;
-    st.classList.remove('ok', 'bad', 'pending', 'quiet', 'off');
-    E.meter.classList.remove('ok', 'bad');
-    E.mark.style.left = (w.threshold * 100) + '%';
+    let cls = '';
+    let mcls = '';
+    setStyle(E.mark, 'left', (w.threshold * 100) + '%');
     let big, small;
     const editing = mode && mode.w === w;
-    if (!w.enabled) { st.classList.add('off'); big = 'OFF'; small = 'Tick "Watch" to turn it on.'; }
-    else if (paused) { st.classList.add('paused'); big = 'PAUSED'; small = 'Click Resume at the top to watch again.'; }
+    if (!w.enabled) { cls = 'off'; big = 'OFF'; small = 'Tick "Watch" to turn it on.'; }
+    else if (paused) { cls = 'paused'; big = 'PAUSED'; small = 'Click Resume at the top to watch again.'; }
     else if (w.kind === 'count' && w.numPos && !w.digit && !editing) {
-      st.classList.add('pending'); big = 'WHICH NUMBER?'; small = 'Type the number to alarm at (for example 2) under the icon below.';
+      cls = 'pending'; big = 'WHICH NUMBER?'; small = 'Type the number to alarm at (for example 2) under the icon below.';
     }
     else if (!ready(w) || !source || editing) {
       big = editing ? 'SETTING UP' : (!source && w.prepared && w.area ? 'READY' : 'NOT SET UP');
@@ -1304,37 +1357,38 @@ function refreshStatus() {
         : !source ? (w.prepared && w.area ? 'Share your game window to start.' : w.builtin ? 'Share your game window, then box the buff area.' : 'Share your game window, then box the area and icon.')
         : w.builtin ? 'Box the buff area (top right of the game). The buff doesn\'t need to be showing.' : 'Box the buff area and the icon.';
     } else if (w.calib) {
-      st.classList.add('pending'); big = 'CALIBRATING';
+      cls = 'pending'; big = 'CALIBRATING';
       small = 'Measuring the icon (' + w.calib.present.length + ' of ' + CALIB_CHECKS + '). Keep it on screen.';
     } else if (!L) { big = 'STARTING'; small = 'Taking the first look…'; }
     else if (w.kind === 'presence') {
-      if (w.alarmOn) { st.classList.add(w.silenced ? 'quiet' : 'bad'); big = 'BUFF MISSING'; small = w.silenced ? 'Alarm silenced until the buff is back.' : w.name + ' is gone. Re-drink it!'; }
-      else if (!L.present) { st.classList.add('pending'); big = 'CHECKING'; small = 'Not found for ' + ((Date.now() - (w.missSince || Date.now())) / 1000).toFixed(1) + ' s…'; }
-      else { st.classList.add('ok'); big = 'BUFF ON'; small = w.name + ' is active.'; }
+      if (w.alarmOn) { cls = w.silenced ? 'quiet' : 'bad'; big = 'BUFF MISSING'; small = w.silenced ? 'Alarm silenced until the buff is back.' : w.name + ' is gone. Re-drink it!'; }
+      else if (!L.present) { cls = 'pending'; big = 'CHECKING'; small = 'Not found for ' + ((Date.now() - (w.missSince || Date.now())) / 1000).toFixed(1) + ' s…'; }
+      else { cls = 'ok'; big = 'BUFF ON'; small = w.name + ' is active.'; }
     } else {
-      if (w.alarmOn) { st.classList.add(w.silenced ? 'quiet' : 'bad'); big = 'AT ' + w.target; small = w.silenced ? 'Quiet until the number changes. The next time it reaches ' + w.target + ' it will alarm.' : w.name + ' is at ' + w.target + '!'; }
-      else if (!L.present) { st.classList.add('pending'); big = 'NOT FOUND'; small = w.builtin ? 'Waiting for the dice to show up.' : "Can't see the icon right now (buff off or covered)."; }
-      else { st.classList.add('ok'); big = 'NOT ' + w.target; small = 'Waiting for ' + w.name + ' to reach ' + w.target + '.'; }
+      if (w.alarmOn) { cls = w.silenced ? 'quiet' : 'bad'; big = 'AT ' + w.target; small = w.silenced ? 'Quiet until the number changes. The next time it reaches ' + w.target + ' it will alarm.' : w.name + ' is at ' + w.target + '!'; }
+      else if (!L.present) { cls = 'pending'; big = 'NOT FOUND'; small = w.builtin ? 'Waiting for the dice to show up.' : "Can't see the icon right now (buff off or covered)."; }
+      else { cls = 'ok'; big = 'NOT ' + w.target; small = 'Waiting for ' + w.name + ' to reach ' + w.target + '.'; }
     }
-    E.big.textContent = big; E.small.textContent = small;
+    setText(E.big, big); setText(E.small, small);
+    setClass(st, 'status' + (cls ? ' ' + cls : '')); setClass(E.meter, 'meter' + (mcls ? ' ' + mcls : ''));
     if (L && ready(w) && source && !editing) {
-      E.fill.style.width = (L.score * 100).toFixed(0) + '%';
-      E.meter.classList.add(L.present ? 'ok' : 'bad');
-      E.score.textContent = pct(L.score) + ' (needs ' + pct(w.threshold) + ')';
-      if (E.digit) E.digit.textContent = L.present ? pct(L.digitScore || 0) + ' (needs ' + pct(w.digitNeed) + ')' : '–';
+      setStyle(E.fill, 'width', (L.score * 100).toFixed(0) + '%');
+      mcls = L.present ? 'ok' : 'bad';
+      setText(E.score, pct(L.score) + ' (needs ' + pct(w.threshold) + ')');
+      if (E.digit) setText(E.digit, L.present ? pct(L.digitScore || 0) + ' (needs ' + pct(w.digitNeed) + ')' : '–');
     } else {
-      E.fill.style.width = '0'; E.score.textContent = '–'; if (E.digit) E.digit.textContent = '–';
+      setStyle(E.fill, 'width', '0%'); setText(E.score, '–'); if (E.digit) setText(E.digit, '–');
     }
-    E.seen.textContent = w.lastSeen ? new Date(w.lastSeen).toLocaleTimeString() : '–';
-    E.bSilence.disabled = !w.alarmOn || w.silenced;
-    E.bRecal.disabled = !ready(w) || !source || !!w.calib || !!editing;
-    E.note.textContent = w.builtin
+    setText(E.seen, w.lastSeen ? new Date(w.lastSeen).toLocaleTimeString() : '–');
+    setProp(E.bSilence, 'disabled', !w.alarmOn || w.silenced);
+    setProp(E.bRecal, 'disabled', !ready(w) || !source || !!w.calib || !!editing);
+    setText(E.note, w.builtin
       ? 'Built-in dice icon: just box the buff area, even before the buff shows up. The framed spot is where it reads the number.' + (w.calibInfo ? ' Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' : '')
       : w.calibInfo
       ? 'Calibrated: icon ' + pct(w.calibInfo.on) + ', other icons up to ' + pct(w.calibInfo.look) + '.' + (w.kind === 'count' && w.numPos ? ' The framed spot is where it reads the number.' : '')
       : w.kind === 'presence'
         ? 'Box the icon while the buff is on. It then measures itself for 2 s.'
-        : 'Box the icon while it shows any number (for example 1), number included. It then measures itself for 2 s.';
+        : 'Box the icon while it shows any number (for example 1), number included. It then measures itself for 2 s.');
   }
 }
 
@@ -1352,7 +1406,7 @@ function bindSettings() {
   show();
   $('inVol').addEventListener('input', e => { G.volume = e.target.value / 100; show(); save(); });
   $('inTol').addEventListener('input', e => { G.tol = +e.target.value; show(); save(); });
-  $('inRate').addEventListener('change', e => { G.interval = +e.target.value; save(); if (ticker) startTicker(); });
+  $('inRate').addEventListener('change', e => { G.interval = +e.target.value; save(); });
   $('inVoice').addEventListener('change', e => { G.voice = e.target.checked; save(); });
   $('inFrozen').addEventListener('change', e => {
     G.frozenAlarm = e.target.checked;
